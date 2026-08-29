@@ -1,0 +1,43 @@
+{
+  "name": "drizzle-down",
+  "version": "0.1.0",
+  "description": "Down migrations, rollback, status and repair for Drizzle ORM on PostgreSQL.",
+  "license": "MIT",
+  "type": "commonjs",
+  "bin": {
+    "drizzle-down": "dist/src/cli.js"
+  },
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "files": [
+    "dist/src"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "drizzle",
+    "drizzle-orm",
+    "drizzle-kit",
+    "migrations",
+    "down-migration",
+    "rollback",
+    "postgres",
+    "postgresql"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/cli.ts",
+    "test": "node --test dist/test/*.test.js",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "pg": ">=8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.11.10",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}
