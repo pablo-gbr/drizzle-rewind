@@ -1,6 +1,6 @@
 {
   "name": "drizzle-down",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Down migrations, rollback, status and repair for Drizzle ORM on PostgreSQL.",
   "license": "MIT",
   "type": "commonjs",
@@ -32,6 +32,7 @@
     "prepublishOnly": "npm run build"
   },
   "peerDependencies": {
+    "drizzle-kit": "^0.31.0",
     "pg": ">=8"
   },
   "devDependencies": {
@@ -54,6 +55,9 @@
   },
   "peerDependenciesMeta": {
     "pg": {
+      "optional": true
+    },
+    "drizzle-kit": {
       "optional": true
     }
   }

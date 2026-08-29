@@ -141,10 +141,33 @@ await rollback("./drizzle", ["--steps", "2", "--force"]);
 const { statements, warnings } = diffSnapshots(currentSnapshot, previousSnapshot);
 ```
 
-## Requirements
+## Compatibility
 
-Node 20 or newer, PostgreSQL, and `pg` as a peer dependency. Only the
-`postgresql` dialect is supported.
+drizzle-down is an add-on, not a replacement. It requires drizzle-kit and does
+nothing without it. It never generates forward migrations and never applies
+them: that stays drizzle-kit's job.
+
+```sh
+drizzle-kit generate     # forward migration, drizzle-kit
+drizzle-down generate    # the matching down.sql
+drizzle-kit migrate      # apply, drizzle-kit
+drizzle-down status      # verify what landed
+drizzle-down rollback    # undo
+```
+
+What it needs to be there already:
+
+- drizzle-kit writing into an `out` directory with `meta/_journal.json` and
+  `meta/*_snapshot.json` (snapshot version 7)
+- the `drizzle.__drizzle_migrations` table, which `drizzle-kit migrate` creates
+- PostgreSQL. Other dialects are not supported yet
+- `pg`, for `status`, `rollback` and `repair`. `generate` only reads files
+- Node 20 or newer
+
+**Version support:** tested against drizzle-kit `0.31.x`, the current stable
+release. drizzle-kit `1.0` is in release candidate and changes how migrations
+are tracked, so treat drizzle-down as unverified there until this note says
+otherwise.
 
 ## License
 
