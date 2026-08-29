@@ -39,5 +39,22 @@
     "@types/pg": "^8.11.10",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3"
+  },
+  "author": "Anas Ismail <anas.ismail1911@gmail.com> (https://anasismail.dev)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AnasIsmai1/drizzle-down.git"
+  },
+  "homepage": "https://github.com/AnasIsmai1/drizzle-down#readme",
+  "bugs": {
+    "url": "https://github.com/AnasIsmai1/drizzle-down/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependenciesMeta": {
+    "pg": {
+      "optional": true
+    }
   }
 }

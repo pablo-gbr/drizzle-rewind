@@ -25,6 +25,29 @@ drizzle-down repair      # fix the tracking table without running migration SQL
 The migration directory is found from `out` in your `drizzle.config.ts`, or
 `DRIZZLE_DIR`, or `--dir <path>`, in that order.
 
+## Adding it to a project
+
+Nothing to copy in. Install it and add the scripts:
+
+```jsonc
+// package.json
+{
+  "scripts": {
+    "db:generate-down": "drizzle-down generate",
+    "db:status": "drizzle-down status",
+    "db:rollback": "drizzle-down rollback",
+    "db:repair": "drizzle-down repair"
+  }
+}
+```
+
+It reads `out` from your existing `drizzle.config.ts`, so there is no second
+config to keep in sync. If your migrations live somewhere else, pass `--dir` or
+set `DRIZZLE_DIR`.
+
+In CI, `drizzle-down status --strict` fails the build while a migration is
+still pending.
+
 ## generate
 
 Diffs each migration's snapshot against the one before it and writes the SQL
@@ -107,9 +130,14 @@ schema already exists.
 
 ## Programmatic use
 
-```ts
-import { diffSnapshots } from "drizzle-down";
+Every command is callable from code, for wiring rollback into your own tooling:
 
+```ts
+import { generate, status, rollback, repair, diffSnapshots } from "drizzle-down";
+
+await rollback("./drizzle", ["--steps", "2", "--force"]);
+
+// or work with the differ directly
 const { statements, warnings } = diffSnapshots(currentSnapshot, previousSnapshot);
 ```
 
