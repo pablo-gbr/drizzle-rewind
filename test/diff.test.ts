@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { diffSnapshots } from "../src/diff";
+import { postgresDialect } from "../src/dialects/postgres";
 import { emptySnapshot, type Snapshot, type TableDef } from "../src/snapshot";
 
 function table(name: string, over: Partial<TableDef> = {}): TableDef {
@@ -125,4 +126,16 @@ test("identical snapshots produce nothing", () => {
   const { statements, warnings } = diffSnapshots(s, s);
   assert.deepEqual(statements, []);
   assert.deepEqual(warnings, []);
+});
+
+test("explicit PostgreSQL dialect preserves default SQL output", () => {
+  const current = snap({
+    tables: { "public.users": table("users", { columns: idCol }) },
+  });
+  const previous = snap();
+
+  assert.deepEqual(
+    diffSnapshots(current, previous, postgresDialect),
+    diffSnapshots(current, previous),
+  );
 });

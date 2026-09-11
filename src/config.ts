@@ -41,9 +41,8 @@ export function requireDatabaseUrl(): string {
 }
 
 /**
- * A pg Pool built from DATABASE_URL. `pg` is a peer dependency: it is required
- * lazily so the commands that only touch files (generate) work without a
- * database driver installed.
+ * Compatibility export for callers that used the old programmatic API.
+ * Commands now go through db/postgres.ts so future dialects do not inherit pg.
  */
 export function createPool(): import("pg").Pool {
   const url = requireDatabaseUrl();
@@ -54,6 +53,3 @@ export function createPool(): import("pg").Pool {
     : undefined;
   return new Pool({ connectionString: url, ...(ssl ? { ssl } : {}) });
 }
-
-export const MIGRATIONS_TABLE = '"drizzle"."__drizzle_migrations"';
-export const UNDEFINED_TABLE = "42P01";

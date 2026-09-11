@@ -2,10 +2,12 @@ import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 
-import { MIGRATIONS_TABLE, UNDEFINED_TABLE, createPool } from "../config";
+import type { DatabaseAdapter } from "../db/adapter";
+import {
+  POSTGRES_MIGRATIONS_TABLE,
+  createPostgresAdapter,
+} from "../db/postgres";
 import { confirm, readJournal, type DbRow, type JournalEntry } from "../journal";
-
-type Pool = import("pg").Pool;
 
 function parseArgs(argv: string[]) {
   let markApplied: number | null = null;
@@ -23,18 +25,20 @@ function parseArgs(argv: string[]) {
   return { markApplied, baseline, cleanOrphans, force };
 }
 
-async function appliedTimestamps(pool: Pool): Promise<Set<string>> {
+async function appliedTimestamps(db: DatabaseAdapter): Promise<Set<string>> {
   try {
-    const result = await pool.query(`SELECT created_at FROM ${MIGRATIONS_TABLE}`);
-    return new Set(result.rows.map((r: { created_at: string }) => r.created_at));
+    const rows = await db.query<{ created_at: string }>(
+      `SELECT created_at FROM ${POSTGRES_MIGRATIONS_TABLE}`,
+    );
+    return new Set(rows.map((r) => r.created_at));
   } catch (err) {
-    if ((err as { code?: string }).code === UNDEFINED_TABLE) return new Set();
+    if (db.isUndefinedTableError(err)) return new Set();
     throw err;
   }
 }
 
 async function markApplied(
-  pool: Pool,
+  db: DatabaseAdapter,
   drizzleDir: string,
   entry: JournalEntry,
 ): Promise<void> {
@@ -46,8 +50,8 @@ async function markApplied(
     .createHash("sha256")
     .update(fs.readFileSync(sqlPath, "utf-8"))
     .digest("hex");
-  await pool.query(
-    `INSERT INTO ${MIGRATIONS_TABLE} (hash, created_at) VALUES ($1, $2)`,
+  await db.execute(
+    `INSERT INTO ${POSTGRES_MIGRATIONS_TABLE} (hash, created_at) VALUES ($1, $2)`,
     [hash, String(entry.when)],
   );
 }
@@ -70,39 +74,39 @@ export async function repair(drizzleDir: string, argv: string[]): Promise<void> 
   }
 
   const journal = readJournal(drizzleDir);
-  const pool = createPool();
+  const db = createPostgresAdapter();
 
   if (opts.markApplied !== null) {
     const entry = journal.entries.find((e) => e.idx === opts.markApplied);
     if (!entry) {
       console.log(`No migration with idx ${opts.markApplied} in the journal.`);
-      await pool.end();
+      await db.close();
       process.exit(1);
     }
-    if ((await appliedTimestamps(pool)).has(String(entry.when))) {
+    if ((await appliedTimestamps(db)).has(String(entry.when))) {
       console.log(`${entry.tag} is already marked as applied.`);
-      await pool.end();
+      await db.close();
       return;
     }
     console.log("Will mark as applied (without running SQL):\n");
     console.log(`  [${String(entry.idx).padStart(4, "0")}] ${entry.tag}\n`);
     if (!opts.force && !(await confirm("Proceed?"))) {
       console.log("Cancelled.");
-      await pool.end();
+      await db.close();
       return;
     }
-    await markApplied(pool, drizzleDir, entry);
+    await markApplied(db, drizzleDir, entry);
     console.log(`Marked ${entry.tag} as applied.`);
-    await pool.end();
+    await db.close();
     return;
   }
 
   if (opts.baseline) {
-    const applied = await appliedTimestamps(pool);
+    const applied = await appliedTimestamps(db);
     const pending = journal.entries.filter((e) => !applied.has(String(e.when)));
     if (pending.length === 0) {
       console.log("All migrations are already applied. Nothing to baseline.");
-      await pool.end();
+      await db.close();
       return;
     }
     console.log(`Will mark ${pending.length} migration(s) as applied (without running SQL):\n`);
@@ -112,15 +116,15 @@ export async function repair(drizzleDir: string, argv: string[]): Promise<void> 
     console.log("");
     if (!opts.force && !(await confirm("Proceed?"))) {
       console.log("Cancelled.");
-      await pool.end();
+      await db.close();
       return;
     }
     for (const e of pending) {
-      await markApplied(pool, drizzleDir, e);
+      await markApplied(db, drizzleDir, e);
       console.log(`  Marked ${e.tag} as applied.`);
     }
     console.log(`\nBaselined ${pending.length} migration(s).`);
-    await pool.end();
+    await db.close();
     return;
   }
 
@@ -128,21 +132,20 @@ export async function repair(drizzleDir: string, argv: string[]): Promise<void> 
   const journalTimestamps = new Set(journal.entries.map((e) => String(e.when)));
   let dbRows: DbRow[] = [];
   try {
-    const result = await pool.query(
-      `SELECT id, hash, created_at FROM ${MIGRATIONS_TABLE} ORDER BY created_at`,
+    dbRows = await db.query<DbRow>(
+      `SELECT id, hash, created_at FROM ${POSTGRES_MIGRATIONS_TABLE} ORDER BY created_at`,
     );
-    dbRows = result.rows;
   } catch (err) {
-    if ((err as { code?: string }).code !== UNDEFINED_TABLE) throw err;
+    if (!db.isUndefinedTableError(err)) throw err;
     console.log("No drizzle.__drizzle_migrations table found.");
-    await pool.end();
+    await db.close();
     return;
   }
 
   const orphans = dbRows.filter((r) => !journalTimestamps.has(r.created_at));
   if (orphans.length === 0) {
     console.log("No orphan entries found.");
-    await pool.end();
+    await db.close();
     return;
   }
 
@@ -154,13 +157,13 @@ export async function repair(drizzleDir: string, argv: string[]): Promise<void> 
 
   if (!opts.force && !(await confirm("Remove these orphan entries?"))) {
     console.log("Cancelled.");
-    await pool.end();
+    await db.close();
     return;
   }
 
   for (const o of orphans) {
-    await pool.query(`DELETE FROM ${MIGRATIONS_TABLE} WHERE id = $1`, [o.id]);
+    await db.execute(`DELETE FROM ${POSTGRES_MIGRATIONS_TABLE} WHERE id = $1`, [o.id]);
   }
   console.log(`Removed ${orphans.length} orphan row(s).`);
-  await pool.end();
+  await db.close();
 }

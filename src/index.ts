@@ -6,6 +6,15 @@ export { rollback } from "./commands/rollback";
 export { repair } from "./commands/repair";
 
 export { diffSnapshots, type DiffResult } from "./diff";
+export { type SqlDialect, type DialectName } from "./dialects/dialect";
+export { PostgresDialect, postgresDialect } from "./dialects/postgres";
+export { type DatabaseAdapter } from "./db/adapter";
+export {
+  POSTGRES_MIGRATIONS_TABLE,
+  POSTGRES_UNDEFINED_TABLE,
+  PostgresDatabaseAdapter,
+  createPostgresAdapter,
+} from "./db/postgres";
 export { emptySnapshot, type Snapshot, type TableDef } from "./snapshot";
 export { resolveDrizzleDir, createPool } from "./config";
 export {

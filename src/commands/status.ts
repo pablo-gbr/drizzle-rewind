@@ -1,7 +1,10 @@
 import * as fs from "fs";
 import * as path from "path";
 
-import { MIGRATIONS_TABLE, UNDEFINED_TABLE, createPool } from "../config";
+import {
+  POSTGRES_MIGRATIONS_TABLE,
+  createPostgresAdapter,
+} from "../db/postgres";
 import { readJournal, type DbRow } from "../journal";
 
 export async function status(drizzleDir: string, argv: string[]): Promise<void> {
@@ -11,16 +14,15 @@ export async function status(drizzleDir: string, argv: string[]): Promise<void> 
   // shared database.
   const strict = argv.includes("--strict");
   const journal = readJournal(drizzleDir);
-  const pool = createPool();
+  const db = createPostgresAdapter();
 
   let dbRows: DbRow[] = [];
   try {
-    const result = await pool.query(
-      `SELECT id, hash, created_at FROM ${MIGRATIONS_TABLE} ORDER BY created_at ASC`,
+    dbRows = await db.query<DbRow>(
+      `SELECT id, hash, created_at FROM ${POSTGRES_MIGRATIONS_TABLE} ORDER BY created_at ASC`,
     );
-    dbRows = result.rows;
   } catch (err) {
-    if ((err as { code?: string }).code !== UNDEFINED_TABLE) throw err;
+    if (!db.isUndefinedTableError(err)) throw err;
 
     console.log("No drizzle.__drizzle_migrations table found.\n");
     console.log("All migrations are pending:\n");
@@ -28,7 +30,7 @@ export async function status(drizzleDir: string, argv: string[]): Promise<void> 
       console.log(`  [pending]  [${String(entry.idx).padStart(4, "0")}] ${entry.tag}`);
     }
     console.log(`\nApplied: 0 | Pending: ${journal.entries.length} | Orphans: 0`);
-    await pool.end();
+    await db.close();
     if (strict && journal.entries.length > 0) process.exit(1);
     return;
   }
@@ -71,6 +73,6 @@ export async function status(drizzleDir: string, argv: string[]): Promise<void> 
     console.log("\nRun 'drizzle-kit migrate' to apply pending migrations.");
   }
 
-  await pool.end();
+  await db.close();
   if (strict && pending > 0) process.exit(1);
 }
