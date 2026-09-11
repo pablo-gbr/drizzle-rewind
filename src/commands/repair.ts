@@ -57,12 +57,12 @@ async function markApplied(
 }
 
 function usage(): void {
-  console.log("Usage: drizzle-down repair <option>\n");
+  console.log("Usage: drizzle-rewind repair <option>\n");
   console.log("  --mark-applied <idx>   Mark one migration applied without running its SQL");
   console.log("  --baseline             Mark every pending migration applied");
   console.log("  --clean-orphans        Delete tracking rows that are not in the journal");
   console.log("  --force                Skip confirmation prompts");
-  console.log("\nRun 'drizzle-down status' to see the current state.");
+  console.log("\nRun 'drizzle-rewind status' to see the current state.");
 }
 
 export async function repair(drizzleDir: string, argv: string[]): Promise<void> {

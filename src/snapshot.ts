@@ -8,6 +8,8 @@ export interface ColumnDef {
   primaryKey: boolean;
   notNull: boolean;
   default?: unknown;
+  autoIncrement?: boolean;
+  generated?: unknown;
 }
 
 export interface IndexColumn {

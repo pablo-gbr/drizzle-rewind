@@ -1,174 +1,137 @@
-# drizzle-down
+# drizzle-rewind
 
-Down migrations, rollback, status and repair for [Drizzle ORM](https://orm.drizzle.team) on PostgreSQL.
+Down migration generation, rollback helpers, status, and repair tooling for
+[Drizzle ORM](https://orm.drizzle.team).
 
-drizzle-kit generates forward migrations and applies them. It does not generate
-down migrations, it cannot roll back, and it has no way to tell you what is
-actually applied. This fills those four gaps using drizzle-kit's own snapshot
-files, so there is nothing new to keep in sync.
+This project is a fork and continuation of
+[AnasIsmai1/drizzle-down](https://github.com/AnasIsmai1/drizzle-down), which
+started as a PostgreSQL rollback helper using drizzle-kit's own snapshot files.
+`drizzle-rewind` keeps that PostgreSQL behavior and is being extended with
+first-class MariaDB/MySQL support.
 
 ```sh
-npm i -D drizzle-down
+npm i -D drizzle-rewind
 ```
+
+## Status
+
+- PostgreSQL: supported for generation, status, rollback, and repair
+- MariaDB/MySQL: down SQL generation is in progress
+- SQLite: not supported yet
 
 ## Commands
 
 ```sh
-drizzle-down generate    # write <tag>.down.sql for every migration missing one
-drizzle-down status      # applied, pending and orphan migrations
-drizzle-down rollback    # run down migrations against the database
-drizzle-down repair      # fix the tracking table without running migration SQL
+drizzle-rewind generate    # write <tag>.down.sql for migrations missing one
+drizzle-rewind status      # applied, pending and orphan migrations
+drizzle-rewind rollback    # run down migrations against PostgreSQL
+drizzle-rewind repair      # fix the PostgreSQL tracking table
 ```
 
-`status`, `rollback` and `repair` need `DATABASE_URL`. `generate` only reads files.
+`status`, `rollback`, and `repair` need `DATABASE_URL`. `generate` only reads
+files.
 
 The migration directory is found from `out` in your `drizzle.config.ts`, or
 `DRIZZLE_DIR`, or `--dir <path>`, in that order.
 
-## Adding it to a project
+## Generate
 
-Nothing to copy in. Install it and add the scripts:
-
-```jsonc
-// package.json
-{
-  "scripts": {
-    "db:generate-down": "drizzle-down generate",
-    "db:status": "drizzle-down status",
-    "db:rollback": "drizzle-down rollback",
-    "db:repair": "drizzle-down repair"
-  }
-}
-```
-
-It reads `out` from your existing `drizzle.config.ts`, so there is no second
-config to keep in sync. If your migrations live somewhere else, pass `--dir` or
-set `DRIZZLE_DIR`.
-
-In CI, `drizzle-down status --strict` fails the build while a migration is
-still pending.
-
-## generate
-
-Diffs each migration's snapshot against the one before it and writes the SQL
-that undoes it, next to the migration as `<tag>.down.sql`.
+Diffs each migration snapshot against the one before it and writes the SQL that
+undoes it next to the migration as `<tag>.down.sql`.
 
 ```sh
-drizzle-down generate           # every migration that has no down file yet
-drizzle-down generate --idx 42  # just this one, overwriting an existing file
+drizzle-rewind generate
+drizzle-rewind generate --idx 42
+drizzle-rewind generate --dialect postgres
+drizzle-rewind generate --dialect mariadb
 ```
 
-Existing down files are never overwritten without `--idx`, so hand-edits
-survive.
+Existing down files are never overwritten without `--idx`.
 
-Some changes cannot be undone, and generate says so rather than pretending:
+MariaDB/MySQL generation currently covers common table, column, index, foreign
+key, primary key, unique constraint, and default rollback SQL. Column changes
+use `MODIFY COLUMN` with the full previous column definition so nullability,
+defaults, and auto-increment metadata are preserved when present in snapshots.
 
-- Restoring a dropped column or table recreates the structure. The data is gone.
-- PostgreSQL cannot remove a value from an enum. Adding one is a one-way door,
-  and the generated down file leaves it alone instead of emitting SQL that
-  would fail.
+Some changes cannot be undone from schema snapshots alone. Restoring a dropped
+column or table recreates the structure, but the previous data is gone.
 
-Operations are ordered so the SQL actually runs: indexes and constraints come
-off before the columns they reference, and go back on after the tables they
-belong to exist again.
-
-## status
+## Rollback
 
 ```sh
-drizzle-down status
-drizzle-down status --strict   # exit 1 while anything is pending
+drizzle-rewind rollback                # undo the most recent PostgreSQL migration
+drizzle-rewind rollback --steps 3      # undo the last three
+drizzle-rewind rollback --to 41        # undo everything above journal index 41
+drizzle-rewind rollback --remove       # also delete migration and snapshot files
+drizzle-rewind rollback --force        # skip the confirmation prompt
 ```
 
-```
-Migration status:
+PostgreSQL rollback keeps the original behavior: each migration is undone inside
+its own transaction. MariaDB/MySQL rollback execution is not enabled yet because
+DDL is not fully transactional there and needs safety guards.
 
-  [applied]  [0000] 0000_init
-  [applied]  [0001] 0001_add_teams
-  [pending]  [0002] 0002_add_invites (no down.sql)
+## Status And Repair
 
-Applied: 2 | Pending: 1 | Orphans: 0
+```sh
+drizzle-rewind status
+drizzle-rewind status --strict
+
+drizzle-rewind repair --mark-applied 7
+drizzle-rewind repair --baseline
+drizzle-rewind repair --clean-orphans
 ```
 
 An orphan is a row in `drizzle.__drizzle_migrations` with no matching journal
-entry, usually a migration from a branch that never merged. On a shared
-database that is often legitimate, so orphans stay informational even under
-`--strict`.
+entry. On a shared database that can be legitimate, so orphans stay
+informational even under `--strict`.
 
-Use `--strict` in CI or a deploy pipeline so a build fails instead of shipping
-code whose migrations were skipped.
-
-## rollback
-
-```sh
-drizzle-down rollback                # undo the most recent migration
-drizzle-down rollback --steps 3      # undo the last three
-drizzle-down rollback --to 41        # undo everything above journal index 41
-drizzle-down rollback --remove       # also delete the migration and snapshot files
-drizzle-down rollback --force        # skip the confirmation prompt
-```
-
-Each migration is undone inside its own transaction. If a statement fails the
-transaction rolls back and the command stops, so the database is never left
-half-undone. Migrations containing `DROP TABLE` or `DROP COLUMN` are marked as
-destructive in the confirmation list before you agree to anything.
-
-`--remove` deletes the `.sql`, `.down.sql` and snapshot files and rewrites the
-journal, for when you want the migration gone rather than just reverted.
-
-## repair
-
-For when the tracking table and the journal disagree.
-
-```sh
-drizzle-down repair --mark-applied 7   # record it as applied without running its SQL
-drizzle-down repair --baseline         # record every pending migration as applied
-drizzle-down repair --clean-orphans    # delete tracking rows with no journal entry
-```
-
-`--baseline` is the one you want when adopting Drizzle on a database whose
-schema already exists.
-
-## Programmatic use
-
-Every command is callable from code, for wiring rollback into your own tooling:
+## Programmatic Use
 
 ```ts
-import { generate, status, rollback, repair, diffSnapshots } from "drizzle-down";
+import {
+  diffSnapshots,
+  generate,
+  mysqlDialect,
+  postgresDialect,
+  repair,
+  rollback,
+  status,
+} from "drizzle-rewind";
+
+const pgDown = diffSnapshots(
+  currentSnapshot,
+  previousSnapshot,
+  postgresDialect,
+);
+const mysqlDown = diffSnapshots(
+  currentSnapshot,
+  previousSnapshot,
+  mysqlDialect,
+);
 
 await rollback("./drizzle", ["--steps", "2", "--force"]);
-
-// or work with the differ directly
-const { statements, warnings } = diffSnapshots(currentSnapshot, previousSnapshot);
 ```
 
 ## Compatibility
 
-drizzle-down is an add-on, not a replacement. It requires drizzle-kit and does
-nothing without it. It never generates forward migrations and never applies
-them: that stays drizzle-kit's job.
+`drizzle-rewind` expects the Drizzle v0-style migration layout:
+
+- `meta/_journal.json`
+- `meta/*_snapshot.json`
+- snapshot version 7
+
+Version support is targeted at drizzle-kit `0.31.x` and drizzle-orm `0.44.x`.
+Drizzle 1.x migration folders are not supported yet.
+
+## Development
 
 ```sh
-drizzle-kit generate     # forward migration, drizzle-kit
-drizzle-down generate    # the matching down.sql
-drizzle-kit migrate      # apply, drizzle-kit
-drizzle-down status      # verify what landed
-drizzle-down rollback    # undo
+npm run build
+npm test
+npm run dev -- generate --dir examples/postgre --idx 1
+npm run dev -- generate --dir examples/mariadb --dialect mariadb --idx 1
 ```
-
-What it needs to be there already:
-
-- drizzle-kit writing into an `out` directory with `meta/_journal.json` and
-  `meta/*_snapshot.json` (snapshot version 7)
-- the `drizzle.__drizzle_migrations` table, which `drizzle-kit migrate` creates
-- PostgreSQL. Other dialects are not supported yet
-- `pg`, for `status`, `rollback` and `repair`. `generate` only reads files
-- Node 20 or newer
-
-**Version support:** tested against drizzle-kit `0.31.x`, the current stable
-release. drizzle-kit `1.0` is in release candidate and changes how migrations
-are tracked, so treat drizzle-down as unverified there until this note says
-otherwise.
 
 ## License
 
-MIT
+Apache-2.0

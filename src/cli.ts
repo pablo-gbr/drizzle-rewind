@@ -5,9 +5,9 @@ import { repair } from "./commands/repair";
 import { rollback } from "./commands/rollback";
 import { status } from "./commands/status";
 
-const USAGE = `drizzle-down - down migrations, rollback, status and repair for Drizzle ORM
+const USAGE = `drizzle-rewind - down migrations, rollback, status and repair for Drizzle ORM
 
-Usage: drizzle-down <command> [options]
+Usage: drizzle-rewind <command> [options]
 
 Commands:
   generate    Write <tag>.down.sql for every migration that lacks one
@@ -20,6 +20,7 @@ Common options:
 
 generate:
   --idx <n>      Regenerate one migration, overwriting an existing down file
+  --dialect <postgres|mysql|mariadb>
 
 status:
   --strict       Exit 1 if anything is pending (for CI and deploy pipelines)

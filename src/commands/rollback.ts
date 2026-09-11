@@ -111,7 +111,7 @@ export async function rollback(drizzleDir: string, argv: string[]): Promise<void
   if (missingDown.length > 0) {
     console.log("Missing down.sql files for:");
     for (const e of missingDown) console.log(`  - ${e.tag}`);
-    console.log("\nRun 'drizzle-down generate' first.");
+    console.log("\nRun 'drizzle-rewind generate' first.");
     await db.close();
     process.exit(1);
   }

@@ -1,11 +1,11 @@
 {
-  "name": "drizzle-down",
+  "name": "drizzle-rewind",
   "version": "0.1.1",
-  "description": "Down migrations, rollback, status and repair for Drizzle ORM on PostgreSQL.",
-  "license": "MIT",
+  "description": "Safe down migration generation and rollback helpers for Drizzle ORM on PostgreSQL and MariaDB/MySQL.",
+  "license": "Apache-2.0",
   "type": "commonjs",
   "bin": {
-    "drizzle-down": "dist/src/cli.js"
+    "drizzle-rewind": "dist/src/cli.js"
   },
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
@@ -23,7 +23,9 @@
     "down-migration",
     "rollback",
     "postgres",
-    "postgresql"
+    "postgresql",
+    "mysql",
+    "mariadb"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -41,14 +43,14 @@
     "tsx": "^4.19.2",
     "typescript": "^5.7.3"
   },
-  "author": "Anas Ismail <anas.ismail1911@gmail.com> (https://anasismail.dev)",
+  "author": "drizzle-rewind contributors",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/AnasIsmai1/drizzle-down.git"
+    "url": "git+https://github.com/pablo-gbr/drizzle-rewind.git"
   },
-  "homepage": "https://github.com/AnasIsmai1/drizzle-down#readme",
+  "homepage": "https://github.com/pablo-gbr/drizzle-rewind#readme",
   "bugs": {
-    "url": "https://github.com/AnasIsmai1/drizzle-down/issues"
+    "url": "https://github.com/pablo-gbr/drizzle-rewind/issues"
   },
   "publishConfig": {
     "access": "public"

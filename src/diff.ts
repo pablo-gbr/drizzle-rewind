@@ -34,7 +34,9 @@ export function diffSnapshots(
     const prevTable = previousTables[tableKey];
     if (!prevTable) continue;
     for (const [idxName, idx] of Object.entries(currentTable.indexes)) {
-      if (!prevTable.indexes[idxName]) statements.push(dialect.generateDropIndex(idx.name));
+      if (!prevTable.indexes[idxName]) {
+        statements.push(dialect.generateDropIndex(currentTable, idx.name));
+      }
     }
   }
 
@@ -44,7 +46,7 @@ export function diffSnapshots(
     if (!prevTable) continue;
     for (const [fkName, fk] of Object.entries(currentTable.foreignKeys)) {
       if (!prevTable.foreignKeys[fkName]) {
-        statements.push(dialect.generateDropConstraint(currentTable, fk.name));
+        statements.push(dialect.generateDropForeignKey(currentTable, fk.name));
       }
     }
   }
@@ -55,7 +57,7 @@ export function diffSnapshots(
     if (!prevTable) continue;
     for (const [ucName, uc] of Object.entries(currentTable.uniqueConstraints)) {
       if (!prevTable.uniqueConstraints[ucName]) {
-        statements.push(dialect.generateDropConstraint(currentTable, uc.name));
+        statements.push(dialect.generateDropUnique(currentTable, uc.name));
       }
     }
   }
@@ -66,7 +68,7 @@ export function diffSnapshots(
     if (!prevTable) continue;
     for (const [pkName, pk] of Object.entries(currentTable.compositePrimaryKeys)) {
       if (!prevTable.compositePrimaryKeys[pkName]) {
-        statements.push(dialect.generateDropConstraint(currentTable, pk.name));
+        statements.push(dialect.generateDropPrimaryKey(currentTable, pk.name));
       }
     }
     for (const [pkName, pk] of Object.entries(prevTable.compositePrimaryKeys)) {
@@ -100,13 +102,23 @@ export function diffSnapshots(
       const prevCol = prevTable.columns[colName];
       if (!prevCol) continue;
 
-      if (currentCol.type !== prevCol.type) {
+      const typeChanged = currentCol.type !== prevCol.type;
+      const nullabilityChanged = currentCol.notNull !== prevCol.notNull;
+      const defaultChanged =
+        JSON.stringify(currentCol.default) !== JSON.stringify(prevCol.default);
+
+      if (dialect.name === "mysql" && (typeChanged || nullabilityChanged || defaultChanged)) {
+        statements.push(...dialect.generateModifyColumn(currentTable, prevCol));
+        continue;
+      }
+
+      if (typeChanged) {
         statements.push(
           dialect.generateSetColumnType(currentTable, currentCol.name, prevCol.type),
         );
       }
 
-      if (currentCol.notNull !== prevCol.notNull) {
+      if (nullabilityChanged) {
         statements.push(
           prevCol.notNull
             ? dialect.generateSetNotNull(currentTable, currentCol.name)
@@ -114,7 +126,7 @@ export function diffSnapshots(
         );
       }
 
-      if (JSON.stringify(currentCol.default) !== JSON.stringify(prevCol.default)) {
+      if (defaultChanged) {
         const prevDefault = prevCol.default;
         statements.push(
           prevDefault !== undefined && prevDefault !== null
@@ -129,10 +141,10 @@ export function diffSnapshots(
   for (const [tableKey, currentTable] of Object.entries(currentTables)) {
     if (previousTables[tableKey]) continue;
     for (const fk of Object.values(currentTable.foreignKeys)) {
-      statements.push(dialect.generateDropConstraint(currentTable, fk.name));
+      statements.push(dialect.generateDropForeignKey(currentTable, fk.name));
     }
     for (const idx of Object.values(currentTable.indexes)) {
-      statements.push(dialect.generateDropIndex(idx.name));
+      statements.push(dialect.generateDropIndex(currentTable, idx.name));
     }
     statements.push(dialect.generateDropTable(currentTable));
   }

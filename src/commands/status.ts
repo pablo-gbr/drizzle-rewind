@@ -67,7 +67,7 @@ export async function status(drizzleDir: string, argv: string[]): Promise<void> 
     `\nApplied: ${applied} | Pending: ${pending} | Orphans: ${orphans.length}`,
   );
   if (orphans.length > 0) {
-    console.log("\nRun 'drizzle-down repair --clean-orphans' to remove orphan rows.");
+    console.log("\nRun 'drizzle-rewind repair --clean-orphans' to remove orphan rows.");
   }
   if (pending > 0) {
     console.log("\nRun 'drizzle-kit migrate' to apply pending migrations.");

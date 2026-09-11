@@ -7,7 +7,9 @@ export { repair } from "./commands/repair";
 
 export { diffSnapshots, type DiffResult } from "./diff";
 export { type SqlDialect, type DialectName } from "./dialects/dialect";
+export { MySqlDialect, mysqlDialect } from "./dialects/mysql";
 export { PostgresDialect, postgresDialect } from "./dialects/postgres";
+export { resolveDialect } from "./dialects/resolve";
 export { type DatabaseAdapter } from "./db/adapter";
 export {
   POSTGRES_MIGRATIONS_TABLE,

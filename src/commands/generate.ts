@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 
 import { diffSnapshots } from "../diff";
+import { resolveDialect } from "../dialects/resolve";
 import {
   BREAKPOINT,
   findSnapshotFile,
@@ -16,6 +17,10 @@ export function generate(drizzleDir: string, argv: string[]): void {
   if (idxFlagPos !== -1 && argv[idxFlagPos + 1]) {
     targetIdx = parseInt(argv[idxFlagPos + 1], 10);
   }
+  const dialectFlagPos = argv.indexOf("--dialect");
+  const dialect = resolveDialect(
+    dialectFlagPos !== -1 ? argv[dialectFlagPos + 1] : undefined,
+  );
 
   const journal = readJournal(drizzleDir);
   console.log(`Found ${journal.entries.length} migrations in journal\n`);
@@ -69,7 +74,7 @@ export function generate(drizzleDir: string, argv: string[]): void {
       previous = readJSON<Snapshot>(prevPath);
     }
 
-    const { statements, warnings } = diffSnapshots(current, previous);
+    const { statements, warnings } = diffSnapshots(current, previous, dialect);
     for (const w of warnings) console.log(`  WARNING: ${w}`);
 
     if (statements.length === 0) {

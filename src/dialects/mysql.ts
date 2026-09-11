@@ -9,42 +9,34 @@ import type {
 } from "../snapshot";
 import type { SqlDialect } from "./dialect";
 
-export class PostgresDialect implements SqlDialect {
-  readonly name = "postgres";
-  readonly supportsTransactionalDDL = true;
+export class MySqlDialect implements SqlDialect {
+  readonly name = "mysql";
+  readonly supportsTransactionalDDL = false;
 
   quoteIdentifier(name: string): string {
-    return `"${name}"`;
+    return `\`${name.replace(/`/g, "``")}\``;
   }
 
   schemaQualified(schema: string, name: string): string {
-    return `${this.quoteIdentifier(schema || "public")}.${this.quoteIdentifier(name)}`;
+    if (!schema) return this.quoteIdentifier(name);
+    return `${this.quoteIdentifier(schema)}.${this.quoteIdentifier(name)}`;
   }
 
   formatDefault(def: unknown): string {
     if (def === null || def === undefined) return "";
-    if (typeof def === "boolean") return def.toString();
+    if (typeof def === "boolean") return def ? "true" : "false";
     if (typeof def === "number") return def.toString();
     return String(def);
   }
 
   generateDropTable(table: TableDef): string {
-    return `DROP TABLE IF EXISTS ${this.schemaQualified(table.schema, table.name)} CASCADE`;
+    return `DROP TABLE IF EXISTS ${this.schemaQualified(table.schema, table.name)}`;
   }
 
   generateCreateTable(table: TableDef): string[] {
-    const statements: string[] = [];
-    const columnDefs: string[] = [];
-
-    for (const col of Object.values(table.columns)) {
-      let colSql = `\t${this.quoteIdentifier(col.name)} ${col.type}`;
-      if (col.primaryKey) colSql += " PRIMARY KEY";
-      if (col.notNull) colSql += " NOT NULL";
-      if (col.default !== undefined && col.default !== null) {
-        colSql += ` DEFAULT ${this.formatDefault(col.default)}`;
-      }
-      columnDefs.push(colSql);
-    }
+    const columnDefs = Object.values(table.columns).map(
+      (col) => `\t${this.columnDefinition(col)}`,
+    );
 
     for (const cpk of Object.values(table.compositePrimaryKeys)) {
       columnDefs.push(
@@ -58,9 +50,9 @@ export class PostgresDialect implements SqlDialect {
       );
     }
 
-    statements.push(
+    const statements = [
       `CREATE TABLE IF NOT EXISTS ${this.schemaQualified(table.schema, table.name)} (\n${columnDefs.join(",\n")}\n)`,
-    );
+    ];
 
     for (const fk of Object.values(table.foreignKeys)) {
       statements.push(this.generateAddFK(table, fk));
@@ -74,12 +66,7 @@ export class PostgresDialect implements SqlDialect {
   }
 
   generateAddColumn(table: TableDef, col: ColumnDef): string {
-    let sql = `ALTER TABLE ${this.schemaQualified(table.schema, table.name)} ADD COLUMN ${this.quoteIdentifier(col.name)} ${col.type}`;
-    if (col.notNull) sql += " NOT NULL";
-    if (col.default !== undefined && col.default !== null) {
-      sql += ` DEFAULT ${this.formatDefault(col.default)}`;
-    }
-    return sql;
+    return `ALTER TABLE ${this.schemaQualified(table.schema, table.name)} ADD COLUMN ${this.columnDefinition(col)}`;
   }
 
   generateDropColumn(table: TableDef, colName: string): string {
@@ -95,57 +82,65 @@ export class PostgresDialect implements SqlDialect {
   }
 
   generateSetNotNull(table: TableDef, colName: string): string {
-    return `ALTER TABLE ${this.schemaQualified(table.schema, table.name)} ALTER COLUMN ${this.quoteIdentifier(colName)} SET NOT NULL`;
+    const col = table.columns[colName];
+    return col
+      ? this.generateModifyColumn(table, { ...col, notNull: true })[0]
+      : `ALTER TABLE ${this.schemaQualified(table.schema, table.name)} MODIFY COLUMN ${this.quoteIdentifier(colName)} NOT NULL`;
   }
 
   generateDropNotNull(table: TableDef, colName: string): string {
-    return `ALTER TABLE ${this.schemaQualified(table.schema, table.name)} ALTER COLUMN ${this.quoteIdentifier(colName)} DROP NOT NULL`;
+    const col = table.columns[colName];
+    return col
+      ? this.generateModifyColumn(table, { ...col, notNull: false })[0]
+      : `ALTER TABLE ${this.schemaQualified(table.schema, table.name)} MODIFY COLUMN ${this.quoteIdentifier(colName)} NULL`;
   }
 
   generateSetColumnType(table: TableDef, colName: string, type: string): string {
-    return `ALTER TABLE ${this.schemaQualified(table.schema, table.name)} ALTER COLUMN ${this.quoteIdentifier(colName)} SET DATA TYPE ${type}`;
+    const col = table.columns[colName];
+    return col
+      ? this.generateModifyColumn(table, { ...col, type })[0]
+      : `ALTER TABLE ${this.schemaQualified(table.schema, table.name)} MODIFY COLUMN ${this.quoteIdentifier(colName)} ${type}`;
   }
 
-  generateModifyColumn(): string[] {
-    throw new Error("PostgreSQL column changes are rendered as specific ALTER COLUMN statements.");
+  generateModifyColumn(table: TableDef, col: ColumnDef): string[] {
+    return [
+      `ALTER TABLE ${this.schemaQualified(table.schema, table.name)} MODIFY COLUMN ${this.columnDefinition(col)}`,
+    ];
   }
 
   generateCreateIndex(table: TableDef, idx: IndexDef): string {
     const unique = idx.isUnique ? "UNIQUE " : "";
-    const method = idx.method || "btree";
-
     const colExprs = idx.columns
       .map((c) => {
         let expr = c.isExpression ? c.expression : this.quoteIdentifier(c.expression);
-        if (c.opclass) expr += ` ${c.opclass}`;
+        if (!c.isExpression && c.asc === false) expr += " DESC";
         return expr;
       })
       .join(", ");
 
-    return `CREATE ${unique}INDEX IF NOT EXISTS ${this.quoteIdentifier(idx.name)} ON ${this.schemaQualified(table.schema, table.name)} USING ${method} (${colExprs})`;
+    return `CREATE ${unique}INDEX ${this.quoteIdentifier(idx.name)} ON ${this.schemaQualified(table.schema, table.name)} (${colExprs})`;
   }
 
-  generateDropIndex(_table: TableDef, indexName: string): string {
-    return `DROP INDEX IF EXISTS ${this.quoteIdentifier(indexName)}`;
+  generateDropIndex(table: TableDef, indexName: string): string {
+    return `ALTER TABLE ${this.schemaQualified(table.schema, table.name)} DROP INDEX ${this.quoteIdentifier(indexName)}`;
   }
 
   generateAddFK(table: TableDef, fk: ForeignKeyDef): string {
     const fromCols = fk.columnsFrom.map((c) => this.quoteIdentifier(c)).join(", ");
     const toCols = fk.columnsTo.map((c) => this.quoteIdentifier(c)).join(", ");
-    const refSchema = fk.schemaTo || table.schema;
-    return `ALTER TABLE ${this.schemaQualified(table.schema, table.name)} ADD CONSTRAINT ${this.quoteIdentifier(fk.name)} FOREIGN KEY (${fromCols}) REFERENCES ${this.schemaQualified(refSchema, fk.tableTo)}(${toCols}) ON DELETE ${fk.onDelete} ON UPDATE ${fk.onUpdate}`;
+    return `ALTER TABLE ${this.schemaQualified(table.schema, table.name)} ADD CONSTRAINT ${this.quoteIdentifier(fk.name)} FOREIGN KEY (${fromCols}) REFERENCES ${this.schemaQualified(fk.schemaTo || "", fk.tableTo)}(${toCols}) ON DELETE ${fk.onDelete} ON UPDATE ${fk.onUpdate}`;
   }
 
   generateDropForeignKey(table: TableDef, constraintName: string): string {
-    return `ALTER TABLE ${this.schemaQualified(table.schema, table.name)} DROP CONSTRAINT ${this.quoteIdentifier(constraintName)}`;
+    return `ALTER TABLE ${this.schemaQualified(table.schema, table.name)} DROP FOREIGN KEY ${this.quoteIdentifier(constraintName)}`;
   }
 
   generateAddCompositePK(table: TableDef, pk: CompositePKDef): string {
     return `ALTER TABLE ${this.schemaQualified(table.schema, table.name)} ADD CONSTRAINT ${this.quoteIdentifier(pk.name)} PRIMARY KEY(${pk.columns.map((c) => this.quoteIdentifier(c)).join(",")})`;
   }
 
-  generateDropPrimaryKey(table: TableDef, pkName: string): string {
-    return `ALTER TABLE ${this.schemaQualified(table.schema, table.name)} DROP CONSTRAINT ${this.quoteIdentifier(pkName)}`;
+  generateDropPrimaryKey(table: TableDef, _pkName: string): string {
+    return `ALTER TABLE ${this.schemaQualified(table.schema, table.name)} DROP PRIMARY KEY`;
   }
 
   generateAddUnique(table: TableDef, uc: UniqueConstraintDef): string {
@@ -153,17 +148,31 @@ export class PostgresDialect implements SqlDialect {
   }
 
   generateDropUnique(table: TableDef, constraintName: string): string {
-    return `ALTER TABLE ${this.schemaQualified(table.schema, table.name)} DROP CONSTRAINT ${this.quoteIdentifier(constraintName)}`;
+    return `ALTER TABLE ${this.schemaQualified(table.schema, table.name)} DROP INDEX ${this.quoteIdentifier(constraintName)}`;
   }
 
   generateCreateEnum(e: EnumDef): string {
-    const values = e.values.map((v) => `'${v}'`).join(", ");
-    return `DO $$ BEGIN\n\tCREATE TYPE ${this.schemaQualified(e.schema, e.name)} AS ENUM(${values});\nEXCEPTION\n\tWHEN duplicate_object THEN null;\nEND $$`;
+    throw new Error(`MariaDB does not support standalone enum type ${e.name}.`);
   }
 
   generateDropEnum(e: EnumDef): string {
-    return `DROP TYPE IF EXISTS ${this.schemaQualified(e.schema, e.name)}`;
+    throw new Error(`MariaDB does not support standalone enum type ${e.name}.`);
+  }
+
+  private columnDefinition(col: ColumnDef): string {
+    if (col.generated !== undefined) {
+      throw new Error(`Generated column ${col.name} is not supported for MariaDB yet.`);
+    }
+
+    let sql = `${this.quoteIdentifier(col.name)} ${col.type}`;
+    if (col.primaryKey) sql += " PRIMARY KEY";
+    sql += col.notNull || col.primaryKey ? " NOT NULL" : " NULL";
+    if (col.default !== undefined && col.default !== null) {
+      sql += ` DEFAULT ${this.formatDefault(col.default)}`;
+    }
+    if (col.autoIncrement) sql += " AUTO_INCREMENT";
+    return sql;
   }
 }
 
-export const postgresDialect = new PostgresDialect();
+export const mysqlDialect = new MySqlDialect();
