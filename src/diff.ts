@@ -1,10 +1,13 @@
 import type { Snapshot } from "./snapshot";
 import type { SqlDialect } from "./dialects/dialect";
 import { postgresDialect } from "./dialects/postgres";
+import { classifyRollbackOperation } from "./safety/classify";
+import type { RollbackWarning } from "./safety/types";
 
 export interface DiffResult {
   statements: string[];
   warnings: string[];
+  riskWarnings: RollbackWarning[];
 }
 
 /**
@@ -23,6 +26,17 @@ export function diffSnapshots(
 ): DiffResult {
   const statements: string[] = [];
   const warnings: string[] = [];
+  const riskWarnings: RollbackWarning[] = [];
+
+  function record(
+    operation: string,
+    table?: string,
+    column?: string,
+  ): void {
+    const warning = classifyRollbackOperation({ operation, table, column });
+    riskWarnings.push(warning);
+    if (warning.level !== "safe") warnings.push(warning.message);
+  }
 
   const currentTables = current.tables;
   const previousTables = previous.tables;
@@ -36,6 +50,7 @@ export function diffSnapshots(
     for (const [idxName, idx] of Object.entries(currentTable.indexes)) {
       if (!prevTable.indexes[idxName]) {
         statements.push(dialect.generateDropIndex(currentTable, idx.name));
+        record("drop-index", currentTable.name);
       }
     }
   }
@@ -47,6 +62,7 @@ export function diffSnapshots(
     for (const [fkName, fk] of Object.entries(currentTable.foreignKeys)) {
       if (!prevTable.foreignKeys[fkName]) {
         statements.push(dialect.generateDropForeignKey(currentTable, fk.name));
+        record("drop-foreign-key", currentTable.name);
       }
     }
   }
@@ -58,6 +74,7 @@ export function diffSnapshots(
     for (const [ucName, uc] of Object.entries(currentTable.uniqueConstraints)) {
       if (!prevTable.uniqueConstraints[ucName]) {
         statements.push(dialect.generateDropUnique(currentTable, uc.name));
+        record("drop-unique-constraint", currentTable.name);
       }
     }
   }
@@ -69,11 +86,13 @@ export function diffSnapshots(
     for (const [pkName, pk] of Object.entries(currentTable.compositePrimaryKeys)) {
       if (!prevTable.compositePrimaryKeys[pkName]) {
         statements.push(dialect.generateDropPrimaryKey(currentTable, pk.name));
+        record("drop-primary-key", currentTable.name);
       }
     }
     for (const [pkName, pk] of Object.entries(prevTable.compositePrimaryKeys)) {
       if (!currentTable.compositePrimaryKeys[pkName]) {
         statements.push(dialect.generateAddCompositePK(currentTable, pk));
+        record("add-primary-key", currentTable.name);
       }
     }
   }
@@ -86,15 +105,14 @@ export function diffSnapshots(
     for (const [colName, col] of Object.entries(currentTable.columns)) {
       if (!prevTable.columns[colName]) {
         statements.push(dialect.generateDropColumn(currentTable, col.name));
+        record("drop-column", currentTable.name, col.name);
       }
     }
 
     for (const [colName, prevCol] of Object.entries(prevTable.columns)) {
       if (!currentTable.columns[colName]) {
         statements.push(dialect.generateAddColumn(currentTable, prevCol));
-        warnings.push(
-          `Restoring column "${prevCol.name}" on "${currentTable.name}". Data from before the drop cannot be recovered.`,
-        );
+        record("restore-column", currentTable.name, prevCol.name);
       }
     }
 
@@ -109,6 +127,7 @@ export function diffSnapshots(
 
       if (dialect.name === "mysql" && (typeChanged || nullabilityChanged || defaultChanged)) {
         statements.push(...dialect.generateModifyColumn(currentTable, prevCol));
+        record("modify-column", currentTable.name, prevCol.name);
         continue;
       }
 
@@ -116,6 +135,7 @@ export function diffSnapshots(
         statements.push(
           dialect.generateSetColumnType(currentTable, currentCol.name, prevCol.type),
         );
+        record("modify-column", currentTable.name, currentCol.name);
       }
 
       if (nullabilityChanged) {
@@ -123,6 +143,11 @@ export function diffSnapshots(
           prevCol.notNull
             ? dialect.generateSetNotNull(currentTable, currentCol.name)
             : dialect.generateDropNotNull(currentTable, currentCol.name),
+        );
+        record(
+          prevCol.notNull ? "set-not-null" : "drop-not-null",
+          currentTable.name,
+          currentCol.name,
         );
       }
 
@@ -133,6 +158,13 @@ export function diffSnapshots(
             ? dialect.generateSetDefault(currentTable, currentCol.name, prevDefault)
             : dialect.generateDropDefault(currentTable, currentCol.name),
         );
+        record(
+          prevDefault !== undefined && prevDefault !== null
+            ? "set-default"
+            : "drop-default",
+          currentTable.name,
+          currentCol.name,
+        );
       }
     }
   }
@@ -142,20 +174,21 @@ export function diffSnapshots(
     if (previousTables[tableKey]) continue;
     for (const fk of Object.values(currentTable.foreignKeys)) {
       statements.push(dialect.generateDropForeignKey(currentTable, fk.name));
+      record("drop-foreign-key", currentTable.name);
     }
     for (const idx of Object.values(currentTable.indexes)) {
       statements.push(dialect.generateDropIndex(currentTable, idx.name));
+      record("drop-index", currentTable.name);
     }
     statements.push(dialect.generateDropTable(currentTable));
+    record("drop-table", currentTable.name);
   }
 
   // Phase 7: restore tables that were removed
   for (const [tableKey, prevTable] of Object.entries(previousTables)) {
     if (currentTables[tableKey]) continue;
     statements.push(...dialect.generateCreateTable(prevTable));
-    warnings.push(
-      `Restoring table "${prevTable.name}". Data from before the drop cannot be recovered.`,
-    );
+    record("restore-table", prevTable.name);
   }
 
   // Phase 8: restore indexes that were removed
@@ -165,6 +198,7 @@ export function diffSnapshots(
     for (const [idxName, idx] of Object.entries(prevTable.indexes)) {
       if (!currentTable.indexes[idxName]) {
         statements.push(dialect.generateCreateIndex(prevTable, idx));
+        record("add-index", prevTable.name);
       }
     }
   }
@@ -176,6 +210,7 @@ export function diffSnapshots(
     for (const [fkName, fk] of Object.entries(prevTable.foreignKeys)) {
       if (!currentTable.foreignKeys[fkName]) {
         statements.push(dialect.generateAddFK(prevTable, fk));
+        record("add-foreign-key", prevTable.name);
       }
     }
   }
@@ -187,27 +222,32 @@ export function diffSnapshots(
     for (const [ucName, uc] of Object.entries(prevTable.uniqueConstraints)) {
       if (!currentTable.uniqueConstraints[ucName]) {
         statements.push(dialect.generateAddUnique(prevTable, uc));
+        record("add-unique-constraint", prevTable.name);
       }
     }
   }
 
   // Phase 11: enum changes
   for (const [enumKey, e] of Object.entries(currentEnums)) {
-    if (!previousEnums[enumKey]) statements.push(dialect.generateDropEnum(e));
+    if (!previousEnums[enumKey]) {
+      statements.push(dialect.generateDropEnum(e));
+      record("drop-enum", e.name);
+    }
   }
   for (const [enumKey, prevEnum] of Object.entries(previousEnums)) {
-    if (!currentEnums[enumKey]) statements.push(dialect.generateCreateEnum(prevEnum));
+    if (!currentEnums[enumKey]) {
+      statements.push(dialect.generateCreateEnum(prevEnum));
+      record("restore-enum", prevEnum.name);
+    }
   }
   for (const [enumKey, currentEnum] of Object.entries(currentEnums)) {
     const prevEnum = previousEnums[enumKey];
     if (!prevEnum) continue;
     const added = currentEnum.values.filter((v) => !prevEnum.values.includes(v));
     if (added.length > 0) {
-      warnings.push(
-        `Enum "${currentEnum.name}" gained values (${added.join(", ")}). PostgreSQL cannot remove enum values, so undoing this means recreating the type. That is NOT in the generated down.sql.`,
-      );
+      record("enum-added-values", currentEnum.name, added.join(", "));
     }
   }
 
-  return { statements, warnings };
+  return { statements, warnings, riskWarnings };
 }

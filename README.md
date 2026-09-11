@@ -47,6 +47,10 @@ drizzle-rewind generate
 drizzle-rewind generate --idx 42
 drizzle-rewind generate --dialect postgres
 drizzle-rewind generate --dialect mariadb --idx 1
+drizzle-rewind generate --dialect mariadb --idx 1 --format json
+drizzle-rewind generate --idx 1 --output rollback.sql
+drizzle-rewind generate --fail-on-warning
+drizzle-rewind generate --fail-on-data-loss
 ```
 
 Existing down files are never overwritten without `--idx`.
@@ -58,6 +62,11 @@ defaults, and auto-increment metadata are preserved when present in snapshots.
 
 Some changes cannot be undone from schema snapshots alone. Restoring a dropped
 column or table recreates the structure, but the previous data is gone.
+Generated SQL files include warning comments for destructive or unsupported
+rollback operations.
+
+`--format json` prints machine-readable statements and warnings instead of
+writing `.down.sql` files.
 
 ## Status And Repair
 
@@ -85,12 +94,17 @@ drizzle-rewind rollback                # undo the most recent PostgreSQL migrati
 drizzle-rewind rollback --steps 3      # undo the last three
 drizzle-rewind rollback --to 41        # undo everything above journal index 41
 drizzle-rewind rollback --dialect postgres
+drizzle-rewind rollback --allow-data-loss
+drizzle-rewind rollback --allow-irreversible-data-loss
 drizzle-rewind rollback --remove       # also delete migration and snapshot files
-drizzle-rewind rollback --force        # skip the confirmation prompt
+drizzle-rewind rollback --force        # skip the confirmation prompt only
+drizzle-rewind rollback --yes          # alias for --force
 ```
 
 PostgreSQL rollback keeps the original behavior: each migration is undone inside
-its own transaction.
+its own transaction. Rollback execution is blocked when destructive SQL is
+detected unless the matching acknowledgement flag is present. `--force` and
+`--yes` only skip confirmation prompts; they do not acknowledge data loss.
 
 ## Programmatic Use
 

@@ -3,6 +3,7 @@ import * as path from "path";
 
 import { createDatabaseAdapter, dialectArg } from "../db/factory";
 import { resolveDialect } from "../dialects/resolve";
+import { EXIT } from "../exit-codes";
 import {
   BREAKPOINT,
   confirm,
@@ -13,20 +14,30 @@ import {
   type Journal,
   type JournalEntry,
 } from "../journal";
+import { assertRollbackAllowed, printableWarnings } from "../safety/classify";
+import { classifySqlWarnings } from "../safety/sql";
+import type { RollbackWarning } from "../safety/types";
 
 function parseArgs(argv: string[]) {
   let steps = 1;
   let to: number | null = null;
   let force = false;
   let remove = false;
+  let allowDataLoss = false;
+  let allowIrreversibleDataLoss = false;
 
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--steps" && argv[i + 1]) steps = parseInt(argv[++i], 10);
     else if (argv[i] === "--to" && argv[i + 1]) to = parseInt(argv[++i], 10);
-    else if (argv[i] === "--force") force = true;
+    else if (argv[i] === "--force" || argv[i] === "--yes") force = true;
     else if (argv[i] === "--remove") remove = true;
+    else if (argv[i] === "--allow-data-loss") allowDataLoss = true;
+    else if (argv[i] === "--allow-irreversible-data-loss") {
+      allowDataLoss = true;
+      allowIrreversibleDataLoss = true;
+    }
   }
-  return { steps, to, force, remove };
+  return { steps, to, force, remove, allowDataLoss, allowIrreversibleDataLoss };
 }
 
 function removeFiles(
@@ -60,7 +71,8 @@ function removeFiles(
 }
 
 export async function rollback(drizzleDir: string, argv: string[]): Promise<void> {
-  const { steps, to, force, remove } = parseArgs(argv);
+  const { steps, to, force, remove, allowDataLoss, allowIrreversibleDataLoss } =
+    parseArgs(argv);
   const journal = readJournal(drizzleDir);
   const dialect = resolveDialect(dialectArg(argv));
 
@@ -68,7 +80,7 @@ export async function rollback(drizzleDir: string, argv: string[]): Promise<void
     console.error(
       "MariaDB/MySQL rollback execution is not enabled yet. Generate and review SQL with `drizzle-rewind generate --dialect mariadb`.",
     );
-    process.exit(1);
+    process.exit(EXIT.UNSUPPORTED);
   }
 
   const db = createDatabaseAdapter(argv);
@@ -120,7 +132,34 @@ export async function rollback(drizzleDir: string, argv: string[]): Promise<void
     for (const e of missingDown) console.log(`  - ${e.tag}`);
     console.log("\nRun 'drizzle-rewind generate' first.");
     await db.close();
-    process.exit(1);
+    process.exit(EXIT.GENERIC);
+  }
+
+  const allWarnings: RollbackWarning[] = [];
+  for (const entry of targets) {
+    const sql = fs.readFileSync(
+      path.join(drizzleDir, `${entry.tag}.down.sql`),
+      "utf-8",
+    );
+    allWarnings.push(...classifySqlWarnings(sql));
+  }
+
+  try {
+    assertRollbackAllowed(allWarnings, {
+      allowDataLoss,
+      allowIrreversibleDataLoss,
+    });
+  } catch (err) {
+    for (const warning of printableWarnings(allWarnings)) {
+      console.error(`WARNING: ${warning.message}`);
+    }
+    console.error((err as Error).message);
+    await db.close();
+    process.exit(
+      allWarnings.some((w) => w.level === "unsupported")
+        ? EXIT.UNSUPPORTED
+        : EXIT.UNSAFE_ROLLBACK,
+    );
   }
 
   console.log(
@@ -131,7 +170,7 @@ export async function rollback(drizzleDir: string, argv: string[]): Promise<void
       path.join(drizzleDir, `${entry.tag}.down.sql`),
       "utf-8",
     );
-    const destructive = sql.includes("DROP TABLE") || sql.includes("DROP COLUMN");
+    const destructive = classifySqlWarnings(sql).length > 0;
     console.log(
       `  [${String(entry.idx).padStart(4, "0")}] ${entry.tag}${destructive ? " (contains destructive operations)" : ""}`,
     );
@@ -174,7 +213,7 @@ export async function rollback(drizzleDir: string, argv: string[]): Promise<void
       console.error(`  ${err}`);
       console.log("\n  Transaction rolled back. The database is unchanged for this migration.");
       await db.close();
-      process.exit(1);
+      process.exit(EXIT.DATABASE_EXECUTION_FAILED);
     }
   }
 

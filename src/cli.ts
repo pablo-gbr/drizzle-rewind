@@ -21,6 +21,10 @@ Common options:
 generate:
   --idx <n>      Regenerate one migration, overwriting an existing down file
   --dialect <postgres|mysql|mariadb>
+  --format <sql|json>
+  --output <file>
+  --fail-on-warning
+  --fail-on-data-loss
 
 status:
   --strict       Exit 1 if anything is pending (for CI and deploy pipelines)

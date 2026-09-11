@@ -23,6 +23,20 @@ export {
   PostgresDatabaseAdapter,
   createPostgresAdapter,
 } from "./db/postgres";
+export {
+  assertRollbackAllowed,
+  classifyRollbackOperation,
+  printableWarnings,
+  summarizeWarnings,
+} from "./safety/classify";
+export { classifySqlWarnings, warningComments } from "./safety/sql";
+export {
+  type RollbackOperation,
+  type RollbackRiskLevel,
+  type RollbackRiskSummary,
+  type RollbackWarning,
+} from "./safety/types";
+export { EXIT } from "./exit-codes";
 export { emptySnapshot, type Snapshot, type TableDef } from "./snapshot";
 export { resolveDrizzleDir, createPool } from "./config";
 export {
