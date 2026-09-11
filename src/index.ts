@@ -7,14 +7,36 @@ export { repair } from "./commands/repair";
 
 export { diffSnapshots, type DiffResult } from "./diff";
 export { type SqlDialect, type DialectName } from "./dialects/dialect";
+export { MySqlDialect, mysqlDialect } from "./dialects/mysql";
 export { PostgresDialect, postgresDialect } from "./dialects/postgres";
+export { resolveDialect } from "./dialects/resolve";
 export { type DatabaseAdapter } from "./db/adapter";
+export { createDatabaseAdapter, dialectArg } from "./db/factory";
+export {
+  MYSQL_MIGRATIONS_TABLE,
+  MySqlDatabaseAdapter,
+  createMySqlAdapter,
+} from "./db/mysql";
 export {
   POSTGRES_MIGRATIONS_TABLE,
   POSTGRES_UNDEFINED_TABLE,
   PostgresDatabaseAdapter,
   createPostgresAdapter,
 } from "./db/postgres";
+export {
+  assertRollbackAllowed,
+  classifyRollbackOperation,
+  printableWarnings,
+  summarizeWarnings,
+} from "./safety/classify";
+export { classifySqlWarnings, warningComments } from "./safety/sql";
+export {
+  type RollbackOperation,
+  type RollbackRiskLevel,
+  type RollbackRiskSummary,
+  type RollbackWarning,
+} from "./safety/types";
+export { EXIT } from "./exit-codes";
 export { emptySnapshot, type Snapshot, type TableDef } from "./snapshot";
 export { resolveDrizzleDir, createPool } from "./config";
 export {

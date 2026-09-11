@@ -28,15 +28,18 @@ export interface SqlDialect {
   generateSetNotNull(table: TableDef, colName: string): string;
   generateDropNotNull(table: TableDef, colName: string): string;
   generateSetColumnType(table: TableDef, colName: string, type: string): string;
+  generateModifyColumn(table: TableDef, col: ColumnDef): string[];
 
   generateCreateIndex(table: TableDef, idx: IndexDef): string;
-  generateDropIndex(indexName: string): string;
+  generateDropIndex(table: TableDef, indexName: string): string;
 
   generateAddFK(table: TableDef, fk: ForeignKeyDef): string;
-  generateDropConstraint(table: TableDef, constraintName: string): string;
+  generateDropForeignKey(table: TableDef, constraintName: string): string;
 
   generateAddCompositePK(table: TableDef, pk: CompositePKDef): string;
+  generateDropPrimaryKey(table: TableDef, pkName: string): string;
   generateAddUnique(table: TableDef, uc: UniqueConstraintDef): string;
+  generateDropUnique(table: TableDef, constraintName: string): string;
 
   generateCreateEnum(e: EnumDef): string;
   generateDropEnum(e: EnumDef): string;
