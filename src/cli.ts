@@ -34,8 +34,14 @@ rollback:
   --steps <n>    How many migrations to undo (default 1)
   --to <idx>     Undo everything above this journal index
   --dialect <postgres|mysql|mariadb>
+  --dry-run      Print the rollback plan without executing SQL
+  --execute      Explicitly request execution; execution remains the default for compatibility
+  --allow-data-loss
+  --allow-irreversible-data-loss
+  --continue-on-error
   --remove       Also delete the migration, down and snapshot files
-  --force        Skip the confirmation prompt
+  --force        Skip the confirmation prompt only
+  --yes          Alias for --force
 
 repair:
   --mark-applied <idx>   Mark one migration applied without running its SQL

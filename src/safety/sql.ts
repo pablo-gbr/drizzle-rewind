@@ -11,22 +11,26 @@ export function warningComments(warnings: RollbackWarning[]): string {
 export function classifySqlWarnings(sql: string): RollbackWarning[] {
   const warnings: RollbackWarning[] = [];
   const upper = sql.toUpperCase();
+  const hasUnsupported = upper.includes("WARNING: UNSUPPORTED");
+  const hasIrreversible = upper.includes("WARNING: IRREVERSIBLE-DATA-LOSS");
+  const hasDataLoss =
+    upper.includes("WARNING: DATA-LOSS") || /\bDROP\s+(TABLE|COLUMN)\b/.test(upper);
 
-  if (upper.includes("WARNING: UNSUPPORTED")) {
+  if (hasUnsupported) {
     warnings.push({
       level: "unsupported",
       operation: "sql-warning",
       message: "A generated SQL warning marked this rollback as unsupported.",
     });
   }
-  if (upper.includes("WARNING: IRREVERSIBLE-DATA-LOSS")) {
+  if (hasIrreversible) {
     warnings.push({
       level: "irreversible-data-loss",
       operation: "sql-warning",
       message: "A generated SQL warning marked this rollback as irreversible data loss.",
     });
   }
-  if (upper.includes("WARNING: DATA-LOSS") || /\bDROP\s+(TABLE|COLUMN)\b/.test(upper)) {
+  if (hasDataLoss) {
     warnings.push({
       level: "data-loss",
       operation: "sql-scan",

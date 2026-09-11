@@ -16,18 +16,18 @@ npm i -D drizzle-rewind
 ## Status
 
 - PostgreSQL: supported for generation, status, rollback, and repair
-- MariaDB/MySQL: supported for generation, status, and repair
+- MariaDB/MySQL: supported for generation, status, rollback, and repair
 - SQLite: not supported yet
 
-Rollback execution is currently PostgreSQL-only. MariaDB/MySQL DDL is not fully
-transactional, so execution waits for stricter safety guards.
+MariaDB/MySQL DDL is not fully transactional. Rollback execution prints that
+warning and stops on the first failed statement by default.
 
 ## Commands
 
 ```sh
 drizzle-rewind generate    # write <tag>.down.sql for migrations missing one
 drizzle-rewind status      # applied, pending and orphan migrations
-drizzle-rewind rollback    # run down migrations against PostgreSQL
+drizzle-rewind rollback    # preview and run down migrations with safety guards
 drizzle-rewind repair      # fix the tracking table without running migration SQL
 ```
 
@@ -94,17 +94,29 @@ drizzle-rewind rollback                # undo the most recent PostgreSQL migrati
 drizzle-rewind rollback --steps 3      # undo the last three
 drizzle-rewind rollback --to 41        # undo everything above journal index 41
 drizzle-rewind rollback --dialect postgres
+drizzle-rewind rollback --dialect mariadb --dry-run
+drizzle-rewind rollback --dialect mariadb --execute
 drizzle-rewind rollback --allow-data-loss
 drizzle-rewind rollback --allow-irreversible-data-loss
+drizzle-rewind rollback --continue-on-error
 drizzle-rewind rollback --remove       # also delete migration and snapshot files
 drizzle-rewind rollback --force        # skip the confirmation prompt only
 drizzle-rewind rollback --yes          # alias for --force
 ```
 
-PostgreSQL rollback keeps the original behavior: each migration is undone inside
-its own transaction. Rollback execution is blocked when destructive SQL is
-detected unless the matching acknowledgement flag is present. `--force` and
-`--yes` only skip confirmation prompts; they do not acknowledge data loss.
+Rollback prints an execution plan before it mutates the database. `--dry-run`
+prints that plan and stops. Execution remains the default for compatibility;
+`--execute` is accepted when you want the command to be explicit.
+
+PostgreSQL runs each migration inside its own transaction. MariaDB/MySQL runs
+statements sequentially, updates migration tracking only after a migration has
+fully completed, and reports which statements succeeded if a later statement
+fails. `--continue-on-error` keeps going after a failed MariaDB/MySQL statement
+and is meant for advanced recovery work only.
+
+Rollback execution is blocked when destructive SQL is detected unless the
+matching acknowledgement flag is present. `--force` and `--yes` only skip
+confirmation prompts; they do not acknowledge data loss.
 
 ## Programmatic Use
 
@@ -151,6 +163,7 @@ npm run build
 npm test
 npm run dev -- generate --dir examples/postgre --idx 1
 npm run dev -- generate --dir examples/mariadb --dialect mariadb --idx 1
+npm run dev -- rollback --dir examples/mariadb --dialect mariadb --dry-run
 ```
 
 Optional drivers:
