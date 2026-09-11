@@ -1,7 +1,9 @@
 import { requireDatabaseUrl } from "../config";
 import type { DatabaseAdapter } from "./adapter";
 
-type Queryable = Pick<import("pg").Pool, "query">;
+type Queryable = {
+  query(sql: string, params?: unknown[]): Promise<{ rows: unknown[] }>;
+};
 type PoolClient = import("pg").PoolClient;
 
 export const POSTGRES_MIGRATIONS_TABLE = '"drizzle"."__drizzle_migrations"';
@@ -9,12 +11,17 @@ export const POSTGRES_UNDEFINED_TABLE = "42P01";
 
 export class PostgresDatabaseAdapter implements DatabaseAdapter {
   readonly dialect = "postgres";
+  readonly migrationsTable = POSTGRES_MIGRATIONS_TABLE;
 
   constructor(
     private readonly db: Queryable,
     private readonly closeDb: () => Promise<void> = async () => {},
     private readonly getClient?: () => Promise<PoolClient>,
   ) {}
+
+  placeholder(position: number): string {
+    return `$${position}`;
+  }
 
   async query<T = unknown>(sql: string, params?: unknown[]): Promise<T[]> {
     const result = await this.db.query(sql, params);

@@ -70,7 +70,7 @@ export function generateCreateIndex(table: TableDef, idx: IndexDef): string {
 }
 
 export function generateDropIndex(indexName: string): string {
-  return postgresDialect.generateDropIndex(indexName);
+  return postgresDialect.generateDropIndex({ schema: "", name: "" } as TableDef, indexName);
 }
 
 export function generateAddFK(table: TableDef, fk: ForeignKeyDef): string {
@@ -81,7 +81,7 @@ export function generateDropConstraint(
   table: TableDef,
   constraintName: string,
 ): string {
-  return postgresDialect.generateDropConstraint(table, constraintName);
+  return postgresDialect.generateDropForeignKey(table, constraintName);
 }
 
 export function generateAddCompositePK(
