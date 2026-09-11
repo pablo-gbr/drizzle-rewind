@@ -1,10 +1,8 @@
 import * as fs from "fs";
 import * as path from "path";
 
-import {
-  POSTGRES_MIGRATIONS_TABLE,
-  createPostgresAdapter,
-} from "../db/postgres";
+import { createDatabaseAdapter, dialectArg } from "../db/factory";
+import { resolveDialect } from "../dialects/resolve";
 import {
   BREAKPOINT,
   confirm,
@@ -64,7 +62,16 @@ function removeFiles(
 export async function rollback(drizzleDir: string, argv: string[]): Promise<void> {
   const { steps, to, force, remove } = parseArgs(argv);
   const journal = readJournal(drizzleDir);
-  const db = createPostgresAdapter();
+  const dialect = resolveDialect(dialectArg(argv));
+
+  if (dialect.name === "mysql") {
+    console.error(
+      "MariaDB/MySQL rollback execution is not enabled yet. Generate and review SQL with `drizzle-rewind generate --dialect mariadb`.",
+    );
+    process.exit(1);
+  }
+
+  const db = createDatabaseAdapter(argv);
 
   if (journal.entries.length === 0) {
     console.log("No migrations in journal.");
@@ -75,9 +82,9 @@ export async function rollback(drizzleDir: string, argv: string[]): Promise<void
   let appliedTimestamps: Set<string>;
   try {
     const rows = await db.query<{ created_at: string }>(
-      `SELECT created_at FROM ${POSTGRES_MIGRATIONS_TABLE} ORDER BY created_at DESC`,
+      `SELECT created_at FROM ${db.migrationsTable} ORDER BY created_at DESC`,
     );
-    appliedTimestamps = new Set(rows.map((r) => r.created_at));
+    appliedTimestamps = new Set(rows.map((r) => String(r.created_at)));
   } catch (err) {
     if (!db.isUndefinedTableError(err)) throw err;
     console.log("No drizzle.__drizzle_migrations table found. Nothing is applied.");
@@ -157,7 +164,7 @@ export async function rollback(drizzleDir: string, argv: string[]): Promise<void
       await db.transaction(async (tx) => {
         for (const stmt of statements) await tx.execute(stmt);
         await tx.execute(
-          `DELETE FROM ${POSTGRES_MIGRATIONS_TABLE} WHERE created_at = $1`,
+          `DELETE FROM ${tx.migrationsTable} WHERE created_at = ${tx.placeholder(1)}`,
           [String(entry.when)],
         );
       });

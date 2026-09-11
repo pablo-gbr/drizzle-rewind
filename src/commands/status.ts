@@ -1,10 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 
-import {
-  POSTGRES_MIGRATIONS_TABLE,
-  createPostgresAdapter,
-} from "../db/postgres";
+import { createDatabaseAdapter } from "../db/factory";
 import { readJournal, type DbRow } from "../journal";
 
 export async function status(drizzleDir: string, argv: string[]): Promise<void> {
@@ -14,12 +11,12 @@ export async function status(drizzleDir: string, argv: string[]): Promise<void> 
   // shared database.
   const strict = argv.includes("--strict");
   const journal = readJournal(drizzleDir);
-  const db = createPostgresAdapter();
+  const db = createDatabaseAdapter(argv);
 
   let dbRows: DbRow[] = [];
   try {
     dbRows = await db.query<DbRow>(
-      `SELECT id, hash, created_at FROM ${POSTGRES_MIGRATIONS_TABLE} ORDER BY created_at ASC`,
+      `SELECT id, hash, created_at FROM ${db.migrationsTable} ORDER BY created_at ASC`,
     );
   } catch (err) {
     if (!db.isUndefinedTableError(err)) throw err;
@@ -35,13 +32,14 @@ export async function status(drizzleDir: string, argv: string[]): Promise<void> 
     return;
   }
 
-  const appliedTimestamps = new Set(dbRows.map((r) => r.created_at));
+  const appliedTimestamps = new Set(dbRows.map((r) => String(r.created_at)));
   const journalTimestamps = new Set(journal.entries.map((e) => String(e.when)));
 
   let applied = 0;
   let pending = 0;
 
   console.log("Migration status:\n");
+  console.log(`Dialect: ${db.dialect}\n`);
 
   for (const entry of journal.entries) {
     const isApplied = appliedTimestamps.has(String(entry.when));
@@ -53,7 +51,7 @@ export async function status(drizzleDir: string, argv: string[]): Promise<void> 
     );
   }
 
-  const orphans = dbRows.filter((r) => !journalTimestamps.has(r.created_at));
+  const orphans = dbRows.filter((r) => !journalTimestamps.has(String(r.created_at)));
   if (orphans.length > 0) {
     console.log("");
     for (const o of orphans) {

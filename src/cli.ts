@@ -24,10 +24,12 @@ generate:
 
 status:
   --strict       Exit 1 if anything is pending (for CI and deploy pipelines)
+  --dialect <postgres|mysql|mariadb>
 
 rollback:
   --steps <n>    How many migrations to undo (default 1)
   --to <idx>     Undo everything above this journal index
+  --dialect <postgres|mysql|mariadb>
   --remove       Also delete the migration, down and snapshot files
   --force        Skip the confirmation prompt
 
@@ -35,6 +37,7 @@ repair:
   --mark-applied <idx>   Mark one migration applied without running its SQL
   --baseline             Mark every pending migration applied
   --clean-orphans        Delete tracking rows that are not in the journal
+  --dialect <postgres|mysql|mariadb>
   --force                Skip the confirmation prompt
 
 DATABASE_URL must be set for status, rollback and repair.

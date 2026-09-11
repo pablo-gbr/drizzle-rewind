@@ -19,7 +19,7 @@ export interface Journal {
 export interface DbRow {
   id: number;
   hash: string;
-  created_at: string;
+  created_at: string | number;
 }
 
 export const BREAKPOINT = "--> statement-breakpoint";

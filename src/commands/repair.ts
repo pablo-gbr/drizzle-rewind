@@ -3,10 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 
 import type { DatabaseAdapter } from "../db/adapter";
-import {
-  POSTGRES_MIGRATIONS_TABLE,
-  createPostgresAdapter,
-} from "../db/postgres";
+import { createDatabaseAdapter } from "../db/factory";
 import { confirm, readJournal, type DbRow, type JournalEntry } from "../journal";
 
 function parseArgs(argv: string[]) {
@@ -28,9 +25,9 @@ function parseArgs(argv: string[]) {
 async function appliedTimestamps(db: DatabaseAdapter): Promise<Set<string>> {
   try {
     const rows = await db.query<{ created_at: string }>(
-      `SELECT created_at FROM ${POSTGRES_MIGRATIONS_TABLE}`,
+      `SELECT created_at FROM ${db.migrationsTable}`,
     );
-    return new Set(rows.map((r) => r.created_at));
+    return new Set(rows.map((r) => String(r.created_at)));
   } catch (err) {
     if (db.isUndefinedTableError(err)) return new Set();
     throw err;
@@ -51,7 +48,7 @@ async function markApplied(
     .update(fs.readFileSync(sqlPath, "utf-8"))
     .digest("hex");
   await db.execute(
-    `INSERT INTO ${POSTGRES_MIGRATIONS_TABLE} (hash, created_at) VALUES ($1, $2)`,
+    `INSERT INTO ${db.migrationsTable} (hash, created_at) VALUES (${db.placeholder(1)}, ${db.placeholder(2)})`,
     [hash, String(entry.when)],
   );
 }
@@ -61,6 +58,7 @@ function usage(): void {
   console.log("  --mark-applied <idx>   Mark one migration applied without running its SQL");
   console.log("  --baseline             Mark every pending migration applied");
   console.log("  --clean-orphans        Delete tracking rows that are not in the journal");
+  console.log("  --dialect <postgres|mysql|mariadb>");
   console.log("  --force                Skip confirmation prompts");
   console.log("\nRun 'drizzle-rewind status' to see the current state.");
 }
@@ -74,7 +72,7 @@ export async function repair(drizzleDir: string, argv: string[]): Promise<void> 
   }
 
   const journal = readJournal(drizzleDir);
-  const db = createPostgresAdapter();
+  const db = createDatabaseAdapter(argv);
 
   if (opts.markApplied !== null) {
     const entry = journal.entries.find((e) => e.idx === opts.markApplied);
@@ -133,7 +131,7 @@ export async function repair(drizzleDir: string, argv: string[]): Promise<void> 
   let dbRows: DbRow[] = [];
   try {
     dbRows = await db.query<DbRow>(
-      `SELECT id, hash, created_at FROM ${POSTGRES_MIGRATIONS_TABLE} ORDER BY created_at`,
+      `SELECT id, hash, created_at FROM ${db.migrationsTable} ORDER BY created_at`,
     );
   } catch (err) {
     if (!db.isUndefinedTableError(err)) throw err;
@@ -142,7 +140,7 @@ export async function repair(drizzleDir: string, argv: string[]): Promise<void> 
     return;
   }
 
-  const orphans = dbRows.filter((r) => !journalTimestamps.has(r.created_at));
+  const orphans = dbRows.filter((r) => !journalTimestamps.has(String(r.created_at)));
   if (orphans.length === 0) {
     console.log("No orphan entries found.");
     await db.close();
@@ -162,7 +160,10 @@ export async function repair(drizzleDir: string, argv: string[]): Promise<void> 
   }
 
   for (const o of orphans) {
-    await db.execute(`DELETE FROM ${POSTGRES_MIGRATIONS_TABLE} WHERE id = $1`, [o.id]);
+    await db.execute(
+      `DELETE FROM ${db.migrationsTable} WHERE id = ${db.placeholder(1)}`,
+      [o.id],
+    );
   }
   console.log(`Removed ${orphans.length} orphan row(s).`);
   await db.close();

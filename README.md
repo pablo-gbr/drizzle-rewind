@@ -16,8 +16,11 @@ npm i -D drizzle-rewind
 ## Status
 
 - PostgreSQL: supported for generation, status, rollback, and repair
-- MariaDB/MySQL: down SQL generation is in progress
+- MariaDB/MySQL: supported for generation, status, and repair
 - SQLite: not supported yet
+
+Rollback execution is currently PostgreSQL-only. MariaDB/MySQL DDL is not fully
+transactional, so execution waits for stricter safety guards.
 
 ## Commands
 
@@ -25,7 +28,7 @@ npm i -D drizzle-rewind
 drizzle-rewind generate    # write <tag>.down.sql for migrations missing one
 drizzle-rewind status      # applied, pending and orphan migrations
 drizzle-rewind rollback    # run down migrations against PostgreSQL
-drizzle-rewind repair      # fix the PostgreSQL tracking table
+drizzle-rewind repair      # fix the tracking table without running migration SQL
 ```
 
 `status`, `rollback`, and `repair` need `DATABASE_URL`. `generate` only reads
@@ -43,7 +46,7 @@ undoes it next to the migration as `<tag>.down.sql`.
 drizzle-rewind generate
 drizzle-rewind generate --idx 42
 drizzle-rewind generate --dialect postgres
-drizzle-rewind generate --dialect mariadb
+drizzle-rewind generate --dialect mariadb --idx 1
 ```
 
 Existing down files are never overwritten without `--idx`.
@@ -56,34 +59,38 @@ defaults, and auto-increment metadata are preserved when present in snapshots.
 Some changes cannot be undone from schema snapshots alone. Restoring a dropped
 column or table recreates the structure, but the previous data is gone.
 
+## Status And Repair
+
+```sh
+drizzle-rewind status
+drizzle-rewind status --strict
+drizzle-rewind status --dialect mariadb
+
+drizzle-rewind repair --mark-applied 7
+drizzle-rewind repair --baseline
+drizzle-rewind repair --clean-orphans
+drizzle-rewind repair --dialect mariadb --baseline
+```
+
+An orphan is a row in the Drizzle migration tracking table with no matching
+journal entry. On a shared database that can be legitimate, so orphans stay
+informational even under `--strict`.
+
+PostgreSQL uses `pg`. MariaDB/MySQL uses `mysql2`.
+
 ## Rollback
 
 ```sh
 drizzle-rewind rollback                # undo the most recent PostgreSQL migration
 drizzle-rewind rollback --steps 3      # undo the last three
 drizzle-rewind rollback --to 41        # undo everything above journal index 41
+drizzle-rewind rollback --dialect postgres
 drizzle-rewind rollback --remove       # also delete migration and snapshot files
 drizzle-rewind rollback --force        # skip the confirmation prompt
 ```
 
 PostgreSQL rollback keeps the original behavior: each migration is undone inside
-its own transaction. MariaDB/MySQL rollback execution is not enabled yet because
-DDL is not fully transactional there and needs safety guards.
-
-## Status And Repair
-
-```sh
-drizzle-rewind status
-drizzle-rewind status --strict
-
-drizzle-rewind repair --mark-applied 7
-drizzle-rewind repair --baseline
-drizzle-rewind repair --clean-orphans
-```
-
-An orphan is a row in `drizzle.__drizzle_migrations` with no matching journal
-entry. On a shared database that can be legitimate, so orphans stay
-informational even under `--strict`.
+its own transaction.
 
 ## Programmatic Use
 
@@ -130,6 +137,13 @@ npm run build
 npm test
 npm run dev -- generate --dir examples/postgre --idx 1
 npm run dev -- generate --dir examples/mariadb --dialect mariadb --idx 1
+```
+
+Optional drivers:
+
+```sh
+npm install pg
+npm install mysql2
 ```
 
 ## License

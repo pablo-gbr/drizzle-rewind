@@ -11,6 +11,12 @@ export { MySqlDialect, mysqlDialect } from "./dialects/mysql";
 export { PostgresDialect, postgresDialect } from "./dialects/postgres";
 export { resolveDialect } from "./dialects/resolve";
 export { type DatabaseAdapter } from "./db/adapter";
+export { createDatabaseAdapter, dialectArg } from "./db/factory";
+export {
+  MYSQL_MIGRATIONS_TABLE,
+  MySqlDatabaseAdapter,
+  createMySqlAdapter,
+} from "./db/mysql";
 export {
   POSTGRES_MIGRATIONS_TABLE,
   POSTGRES_UNDEFINED_TABLE,
