@@ -13,11 +13,11 @@ first-class MariaDB/MySQL support.
 npm i -D drizzle-rewind
 ```
 
-## Status
+## Supported Engines
 
-- PostgreSQL: supported for generation, status, rollback, and repair
-- MariaDB/MySQL: supported for generation, status, rollback, and repair
-- SQLite: not supported yet
+- 🟢 PostgreSQL: supported for generation, status, rollback, and repair
+- 🔵 MariaDB/MySQL: supported for generation, status, rollback, and repair
+- ⚪ SQLite: not supported yet
 
 MariaDB/MySQL DDL is not fully transactional. Rollback execution prints that
 warning and stops on the first failed statement by default.
@@ -35,6 +35,13 @@ drizzle-rewind rollback    # preview and run down migrations with safety guards
 drizzle-rewind repair      # fix the tracking table without running migration SQL
 ```
 
+Get CLI help with:
+
+```sh
+drizzle-rewind --help
+drizzle-rewind -h
+```
+
 `status`, `rollback`, and `repair` need `DATABASE_URL`. `generate` only reads
 files.
 
@@ -44,6 +51,41 @@ The migration directory is found from `out` in your `drizzle.config.ts`, or
 Use `--dialect postgres`, `--dialect mysql`, or `--dialect mariadb` when the
 database type cannot be inferred from context. `mysql` and `mariadb` use the
 same SQL dialect implementation.
+
+## Local Usage
+
+When running from an installed local package, npm scripts are usually the
+simplest path:
+
+```jsonc
+{
+  "scripts": {
+    "db:down": "drizzle-rewind generate --dialect mariadb",
+    "db:status": "drizzle-rewind status --dialect mariadb",
+    "db:rollback:preview": "drizzle-rewind rollback --dialect mariadb --steps 1 --dry-run",
+    "db:rollback": "node --env-file=.env ./node_modules/drizzle-rewind/dist/src/cli.js rollback --dialect mariadb --steps 1 --execute --allow-data-loss --yes"
+  }
+}
+```
+
+Node does not automatically load `.env` files for CLI binaries. If your local
+workflow depends on `.env`, either set `DATABASE_URL` in the shell before
+running `drizzle-rewind`, or use Node's built-in `--env-file=.env` flag as shown
+above.
+
+PowerShell example:
+
+```powershell
+$env:DATABASE_URL="mysql://root:root@127.0.0.1:3307/rewind_test"
+npx drizzle-rewind status --dialect mariadb
+```
+
+bash/zsh example:
+
+```sh
+export DATABASE_URL="mysql://root:root@127.0.0.1:3307/rewind_test"
+npx drizzle-rewind status --dialect mariadb
+```
 
 ## Generate
 
@@ -226,6 +268,9 @@ Optional drivers:
 npm install pg
 npm install mysql2
 ```
+
+See [CHANGELOG.md](CHANGELOG.md) for release notes and [ROADMAP.md](ROADMAP.md)
+for planned work.
 
 ## License
 

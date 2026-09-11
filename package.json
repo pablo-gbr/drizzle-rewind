@@ -1,6 +1,6 @@
 {
   "name": "drizzle-rewind",
-  "version": "0.1.1",
+  "version": "0.1.0",
   "description": "Safe down migration generation and rollback helpers for Drizzle ORM on PostgreSQL and MariaDB/MySQL.",
   "license": "Apache-2.0",
   "type": "commonjs",
@@ -10,7 +10,9 @@
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
   "files": [
-    "dist/src"
+    "dist/src",
+    "CHANGELOG.md",
+    "ROADMAP.md"
   ],
   "engines": {
     "node": ">=20"

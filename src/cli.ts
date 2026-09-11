@@ -17,6 +17,7 @@ Commands:
 
 Common options:
   --dir <path>   Migration output directory (default: drizzle.config.ts "out", else ./drizzle)
+  --help, -h     Show this help message
 
 generate:
   --idx <n>      Regenerate one migration, overwriting an existing down file
