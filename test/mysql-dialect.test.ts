@@ -152,3 +152,74 @@ test("does not render standalone PostgreSQL enum SQL for MariaDB", () => {
     }),
   );
 });
+
+test("diffs real Drizzle MySQL snapshots without enum or schema fields", () => {
+  const current = {
+    version: "5",
+    dialect: "mysql",
+    id: "current",
+    prevId: "previous",
+    tables: {
+      users: table("users", {
+        schema: undefined as unknown as string,
+        columns: {
+          id: {
+            name: "id",
+            type: "int",
+            primaryKey: false,
+            notNull: true,
+            autoincrement: true,
+          },
+          name: {
+            name: "name",
+            type: "varchar(200)",
+            primaryKey: false,
+            notNull: true,
+          },
+          age: {
+            name: "age",
+            type: "int",
+            primaryKey: false,
+            notNull: true,
+          },
+        },
+        compositePrimaryKeys: {
+          users_id: { name: "users_id", columns: ["id"] },
+        },
+      }),
+    },
+    _meta: { columns: {}, schemas: {}, tables: {} },
+  } as unknown as Snapshot;
+  const previous = {
+    ...current,
+    id: "previous",
+    prevId: "base",
+    tables: {
+      users: table("users", {
+        schema: undefined as unknown as string,
+        columns: {
+          id: {
+            name: "id",
+            type: "int",
+            primaryKey: false,
+            notNull: true,
+            autoincrement: true,
+          },
+          name: {
+            name: "name",
+            type: "varchar(200)",
+            primaryKey: false,
+            notNull: true,
+          },
+        },
+        compositePrimaryKeys: {
+          users_id: { name: "users_id", columns: ["id"] },
+        },
+      }),
+    },
+  } as unknown as Snapshot;
+
+  assert.deepEqual(diffSnapshots(current, previous, mysqlDialect).statements, [
+    "ALTER TABLE `users` DROP COLUMN `age`",
+  ]);
+});

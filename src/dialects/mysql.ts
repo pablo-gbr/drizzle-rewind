@@ -170,7 +170,7 @@ export class MySqlDialect implements SqlDialect {
     if (col.default !== undefined && col.default !== null) {
       sql += ` DEFAULT ${this.formatDefault(col.default)}`;
     }
-    if (col.autoIncrement) sql += " AUTO_INCREMENT";
+    if (col.autoIncrement || col.autoincrement) sql += " AUTO_INCREMENT";
     return sql;
   }
 }

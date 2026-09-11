@@ -9,6 +9,7 @@ export interface ColumnDef {
   notNull: boolean;
   default?: unknown;
   autoIncrement?: boolean;
+  autoincrement?: boolean;
   generated?: unknown;
 }
 

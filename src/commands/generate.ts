@@ -30,9 +30,6 @@ export function generate(drizzleDir: string, argv: string[]): void {
     targetIdx = parseInt(argv[idxFlagPos + 1], 10);
   }
   const dialectFlagPos = argv.indexOf("--dialect");
-  const dialect = resolveDialect(
-    dialectFlagPos !== -1 ? argv[dialectFlagPos + 1] : undefined,
-  );
   const format = argv.includes("--format")
     ? argv[argv.indexOf("--format") + 1]
     : "sql";
@@ -49,6 +46,9 @@ export function generate(drizzleDir: string, argv: string[]): void {
   }
 
   const journal = readJournal(drizzleDir);
+  const dialect = resolveDialect(
+    dialectFlagPos !== -1 ? argv[dialectFlagPos + 1] : journal.dialect,
+  );
   if (!json) console.log(`Found ${journal.entries.length} migrations in journal\n`);
 
   const entries =
