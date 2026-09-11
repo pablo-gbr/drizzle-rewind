@@ -22,6 +22,10 @@ npm i -D drizzle-rewind
 MariaDB/MySQL DDL is not fully transactional. Rollback execution prints that
 warning and stops on the first failed statement by default.
 
+This is not a disaster-recovery tool. Generate and review rollback SQL before
+execution, and keep real database backups or point-in-time recovery available
+for production systems.
+
 ## Commands
 
 ```sh
@@ -36,6 +40,10 @@ files.
 
 The migration directory is found from `out` in your `drizzle.config.ts`, or
 `DRIZZLE_DIR`, or `--dir <path>`, in that order.
+
+Use `--dialect postgres`, `--dialect mysql`, or `--dialect mariadb` when the
+database type cannot be inferred from context. `mysql` and `mariadb` use the
+same SQL dialect implementation.
 
 ## Generate
 
@@ -117,6 +125,52 @@ and is meant for advanced recovery work only.
 Rollback execution is blocked when destructive SQL is detected unless the
 matching acknowledgement flag is present. `--force` and `--yes` only skip
 confirmation prompts; they do not acknowledge data loss.
+
+MariaDB/MySQL warning:
+
+```text
+Warning: MariaDB/MySQL DDL is not fully transactional.
+If a rollback statement fails, earlier DDL may already have been applied.
+Review the generated SQL and ensure backups/recovery procedures exist.
+```
+
+## CI Example
+
+```yaml
+rollback_preview:
+  script:
+    - drizzle-rewind generate --dialect mariadb --idx 1 --format json
+    - drizzle-rewind rollback --dialect mariadb --steps 1 --dry-run
+
+rollback_execute:
+  when: manual
+  script:
+    - drizzle-rewind rollback --dialect mariadb --steps 1 --execute --allow-data-loss --yes
+```
+
+`--yes` does not acknowledge destructive rollback operations. Use
+`--allow-data-loss` or `--allow-irreversible-data-loss` after reviewing the
+generated SQL.
+
+## Exit Codes
+
+- `0`: success
+- `1`: generic error
+- `2`: invalid CLI usage or configuration
+- `3`: unsupported migration or dialect operation
+- `4`: destructive rollback blocked by safety guards
+- `5`: database execution failed
+- `6`: migration state mismatch or tracking inconsistency
+
+## Recovery Limits
+
+`drizzle-rewind` is not a substitute for:
+
+- backups
+- database snapshots
+- point-in-time recovery
+- tested deployment rollback procedures
+- expand/contract schema migration practices when required
 
 ## Programmatic Use
 
