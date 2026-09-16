@@ -14,6 +14,9 @@ export class MySqlDialect implements SqlDialect {
   readonly supportsTransactionalDDL = false;
 
   quoteIdentifier(name: string): string {
+    if (typeof name !== "string") {
+      throw new Error("MariaDB identifier is missing from the Drizzle snapshot.");
+    }
     return `\`${name.replace(/`/g, "``")}\``;
   }
 
@@ -112,8 +115,16 @@ export class MySqlDialect implements SqlDialect {
     const unique = idx.isUnique ? "UNIQUE " : "";
     const colExprs = idx.columns
       .map((c) => {
-        let expr = c.isExpression ? c.expression : this.quoteIdentifier(c.expression);
-        if (!c.isExpression && c.asc === false) expr += " DESC";
+        const expression =
+          typeof c === "string"
+            ? c
+            : c.expression ?? ("name" in c ? String(c.name) : undefined);
+        if (expression === undefined) {
+          throw new Error(`Index ${idx.name} has a column without an expression/name.`);
+        }
+        const isExpression = typeof c !== "string" && c.isExpression;
+        let expr = isExpression ? expression : this.quoteIdentifier(expression);
+        if (!isExpression && typeof c !== "string" && c.asc === false) expr += " DESC";
         return expr;
       })
       .join(", ");

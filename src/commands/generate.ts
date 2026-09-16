@@ -9,7 +9,13 @@ import {
   findSnapshotFile,
   readJSON,
   readJournal,
+  type JournalEntry,
 } from "../journal";
+import {
+  applyMySqlForwardNames,
+  mergeMySqlForwardNames,
+  parseMySqlForwardNames,
+} from "../mysql-forward-names";
 import { printableWarnings, summarizeWarnings } from "../safety/classify";
 import { warningComments } from "../safety/sql";
 import type { RollbackWarning } from "../safety/types";
@@ -88,7 +94,7 @@ export function generate(drizzleDir: string, argv: string[]): void {
       console.error(`  ERROR: snapshot not found for idx ${entry.idx}`);
       continue;
     }
-    const current = readJSON<Snapshot>(currentPath);
+    let current = readJSON<Snapshot>(currentPath);
 
     let previous: Snapshot;
     if (entry.idx === 0) {
@@ -105,6 +111,17 @@ export function generate(drizzleDir: string, argv: string[]): void {
         continue;
       }
       previous = readJSON<Snapshot>(prevPath);
+    }
+
+    if (dialect.name === "mysql") {
+      current = applyMySqlForwardNames(
+        current,
+        readMySqlForwardNamesThrough(drizzleDir, journal.entries, entry.idx),
+      );
+      previous = applyMySqlForwardNames(
+        previous,
+        readMySqlForwardNamesThrough(drizzleDir, journal.entries, entry.idx - 1),
+      );
     }
 
     const { statements, riskWarnings } = diffSnapshots(current, previous, dialect);
@@ -162,4 +179,18 @@ export function generate(drizzleDir: string, argv: string[]): void {
   } else {
     console.log(`\nDone. Generated: ${generated}, Skipped: ${skipped}`);
   }
+}
+
+function readMySqlForwardNamesThrough(
+  drizzleDir: string,
+  entries: JournalEntry[],
+  maxIdx: number,
+) {
+  return mergeMySqlForwardNames(
+    entries
+      .filter((e) => e.idx <= maxIdx)
+      .map((e) => path.join(drizzleDir, `${e.tag}.sql`))
+      .filter((p) => fs.existsSync(p))
+      .map((p) => parseMySqlForwardNames(fs.readFileSync(p, "utf-8"))),
+  );
 }

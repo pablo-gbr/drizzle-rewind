@@ -49,7 +49,7 @@ export function diffSnapshots(
     if (!prevTable) continue;
     for (const [idxName, idx] of Object.entries(currentTable.indexes ?? {})) {
       if (!(prevTable.indexes ?? {})[idxName]) {
-        statements.push(dialect.generateDropIndex(currentTable, idx.name));
+        statements.push(dialect.generateDropIndex(currentTable, idx.name ?? idxName));
         record("drop-index", currentTable.name);
       }
     }
@@ -61,7 +61,7 @@ export function diffSnapshots(
     if (!prevTable) continue;
     for (const [fkName, fk] of Object.entries(currentTable.foreignKeys ?? {})) {
       if (!(prevTable.foreignKeys ?? {})[fkName]) {
-        statements.push(dialect.generateDropForeignKey(currentTable, fk.name));
+        statements.push(dialect.generateDropForeignKey(currentTable, fk.name ?? fkName));
         record("drop-foreign-key", currentTable.name);
       }
     }
@@ -73,7 +73,7 @@ export function diffSnapshots(
     if (!prevTable) continue;
     for (const [ucName, uc] of Object.entries(currentTable.uniqueConstraints ?? {})) {
       if (!(prevTable.uniqueConstraints ?? {})[ucName]) {
-        statements.push(dialect.generateDropUnique(currentTable, uc.name));
+        statements.push(dialect.generateDropUnique(currentTable, uc.name ?? ucName));
         record("drop-unique-constraint", currentTable.name);
       }
     }
@@ -85,13 +85,13 @@ export function diffSnapshots(
     if (!prevTable) continue;
     for (const [pkName, pk] of Object.entries(currentTable.compositePrimaryKeys ?? {})) {
       if (!(prevTable.compositePrimaryKeys ?? {})[pkName]) {
-        statements.push(dialect.generateDropPrimaryKey(currentTable, pk.name));
+        statements.push(dialect.generateDropPrimaryKey(currentTable, pk.name ?? pkName));
         record("drop-primary-key", currentTable.name);
       }
     }
     for (const [pkName, pk] of Object.entries(prevTable.compositePrimaryKeys ?? {})) {
       if (!(currentTable.compositePrimaryKeys ?? {})[pkName]) {
-        statements.push(dialect.generateAddCompositePK(currentTable, pk));
+        statements.push(dialect.generateAddCompositePK(currentTable, { ...pk, name: pk.name ?? pkName }));
         record("add-primary-key", currentTable.name);
       }
     }
@@ -172,12 +172,12 @@ export function diffSnapshots(
   // Phase 6: drop tables that were added
   for (const [tableKey, currentTable] of Object.entries(currentTables)) {
     if (previousTables[tableKey]) continue;
-    for (const fk of Object.values(currentTable.foreignKeys ?? {})) {
-      statements.push(dialect.generateDropForeignKey(currentTable, fk.name));
+    for (const [fkName, fk] of Object.entries(currentTable.foreignKeys ?? {})) {
+      statements.push(dialect.generateDropForeignKey(currentTable, fk.name ?? fkName));
       record("drop-foreign-key", currentTable.name);
     }
-    for (const idx of Object.values(currentTable.indexes ?? {})) {
-      statements.push(dialect.generateDropIndex(currentTable, idx.name));
+    for (const [idxName, idx] of Object.entries(currentTable.indexes ?? {})) {
+      statements.push(dialect.generateDropIndex(currentTable, idx.name ?? idxName));
       record("drop-index", currentTable.name);
     }
     statements.push(dialect.generateDropTable(currentTable));
@@ -197,7 +197,7 @@ export function diffSnapshots(
     if (!currentTable) continue;
     for (const [idxName, idx] of Object.entries(prevTable.indexes ?? {})) {
       if (!(currentTable.indexes ?? {})[idxName]) {
-        statements.push(dialect.generateCreateIndex(prevTable, idx));
+        statements.push(dialect.generateCreateIndex(prevTable, { ...idx, name: idx.name ?? idxName }));
         record("add-index", prevTable.name);
       }
     }
@@ -209,7 +209,7 @@ export function diffSnapshots(
     if (!currentTable) continue;
     for (const [fkName, fk] of Object.entries(prevTable.foreignKeys ?? {})) {
       if (!(currentTable.foreignKeys ?? {})[fkName]) {
-        statements.push(dialect.generateAddFK(prevTable, fk));
+        statements.push(dialect.generateAddFK(prevTable, { ...fk, name: fk.name ?? fkName }));
         record("add-foreign-key", prevTable.name);
       }
     }
@@ -221,7 +221,7 @@ export function diffSnapshots(
     if (!currentTable) continue;
     for (const [ucName, uc] of Object.entries(prevTable.uniqueConstraints ?? {})) {
       if (!(currentTable.uniqueConstraints ?? {})[ucName]) {
-        statements.push(dialect.generateAddUnique(prevTable, uc));
+        statements.push(dialect.generateAddUnique(prevTable, { ...uc, name: uc.name ?? ucName }));
         record("add-unique-constraint", prevTable.name);
       }
     }

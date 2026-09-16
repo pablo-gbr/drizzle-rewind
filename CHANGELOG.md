@@ -1,6 +1,16 @@
 # Changelog
 
-## 0.1.0 - Initial Release
+## 0.1.1 - 2026-09-26
+
+### Fixed:
+
+- Avoided a crash while generating MySQL/MariaDB down migrations from Drizzle
+  snapshots that keep index or constraint names only in the snapshot map key.
+- Read MySQL/MariaDB forward migration SQL to respect manually shortened
+  foreign key, unique, and index names when the snapshot still has Drizzle's
+  long generated name.
+
+## 0.1.0 - Initial Release - 2026-09-11
 
 Initial `drizzle-rewind` release, forked from
 [AnasIsmai1/drizzle-down](https://github.com/AnasIsmai1/drizzle-down).

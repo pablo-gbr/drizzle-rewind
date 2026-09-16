@@ -3,7 +3,17 @@ import { test } from "node:test";
 
 import { diffSnapshots } from "../src/diff";
 import { mysqlDialect } from "../src/dialects/mysql";
-import { emptySnapshot, type Snapshot, type TableDef } from "../src/snapshot";
+import {
+  applyMySqlForwardNames,
+  parseMySqlForwardNames,
+} from "../src/mysql-forward-names";
+import {
+  emptySnapshot,
+  type IndexColumn,
+  type IndexDef,
+  type Snapshot,
+  type TableDef,
+} from "../src/snapshot";
 
 function table(name: string, over: Partial<TableDef> = {}): TableDef {
   return {
@@ -141,6 +151,102 @@ test("renders MariaDB foreign keys, primary keys, and indexes", () => {
     mysqlDialect.generateDropIndex(child, "child_parent_id_idx"),
     "ALTER TABLE `child` DROP INDEX `child_parent_id_idx`",
   );
+});
+
+test("diffs Drizzle MySQL indexes that keep names in snapshot keys", () => {
+  const current = snap({
+    tables: {
+      alpha_records: table("alpha_records", {
+        columns: {
+          id: { name: "id", type: "int", primaryKey: true, notNull: true },
+          group_id: {
+            name: "group_id",
+            type: "int",
+            primaryKey: false,
+            notNull: true,
+          },
+          sequence_no: { name: "sequence_no", type: "int", primaryKey: false, notNull: true },
+        },
+        indexes: {
+          alpha_records_group_sequence_unique: {
+            columns: [
+              { name: "group_id", isExpression: false, asc: true, nulls: "last" },
+              { name: "sequence_no", isExpression: false, asc: true, nulls: "last" },
+            ] as unknown as IndexColumn[],
+            isUnique: true,
+            concurrently: false,
+            method: "btree",
+            with: {},
+          } as unknown as IndexDef,
+        },
+      }),
+    },
+  } as unknown as Snapshot);
+  const previous = snap({
+    tables: {
+      alpha_records: table("alpha_records", {
+        columns: current.tables.alpha_records.columns,
+        indexes: {},
+      }),
+    },
+  });
+
+  assert.deepEqual(diffSnapshots(current, previous, mysqlDialect).statements, [
+    "ALTER TABLE `alpha_records` DROP INDEX `alpha_records_group_sequence_unique`",
+  ]);
+});
+
+test("uses shortened MySQL names from forward SQL when snapshots keep long names", () => {
+  const current = snap({
+    tables: {
+      alpha_event_messages: table("alpha_event_messages", {
+        columns: {
+          id: { name: "id", type: "int", primaryKey: true, notNull: true },
+          source_entity_id: {
+            name: "source_entity_id",
+            type: "int",
+            primaryKey: false,
+            notNull: true,
+          },
+        },
+        foreignKeys: {
+          alpha_event_messages_source_entity_id_beta_entities_id_fk: {
+            name: "alpha_event_messages_source_entity_id_beta_entities_id_fk",
+            tableFrom: "alpha_event_messages",
+            tableTo: "beta_entities",
+            columnsFrom: ["source_entity_id"],
+            columnsTo: ["id"],
+            onDelete: "restrict",
+            onUpdate: "cascade",
+          },
+        },
+        indexes: {
+          idx_alpha_event_messages_source_entity: {
+            name: "idx_alpha_event_messages_source_entity",
+            columns: ["source_entity_id"] as unknown as IndexColumn[],
+            isUnique: false,
+            concurrently: false,
+            method: "btree",
+            with: {},
+          },
+        },
+      }),
+    },
+  } as unknown as Snapshot);
+  const previous = snap({
+    tables: {
+      alpha_event_messages: table("alpha_event_messages", {
+        columns: current.tables.alpha_event_messages.columns,
+      }),
+    },
+  });
+  const sql = "ALTER TABLE `alpha_event_messages` ADD CONSTRAINT `aem_source_beta_fk` FOREIGN KEY (`source_entity_id`) REFERENCES `beta_entities`(`id`) ON DELETE restrict ON UPDATE cascade;--> statement-breakpoint\nALTER TABLE `alpha_event_messages` ADD INDEX `aem_source_idx` (`source_entity_id`);";
+  const reconciled = applyMySqlForwardNames(current, parseMySqlForwardNames(sql));
+
+  assert.deepEqual(diffSnapshots(reconciled, previous, mysqlDialect).statements, [
+    "ALTER TABLE `alpha_event_messages` DROP INDEX `aem_source_idx`",
+    "ALTER TABLE `alpha_event_messages` DROP FOREIGN KEY `aem_source_beta_fk`",
+  ]);
 });
 
 test("does not render standalone PostgreSQL enum SQL for MariaDB", () => {
