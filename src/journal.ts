@@ -1,3 +1,4 @@
+import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import * as readline from "readline";
@@ -30,6 +31,13 @@ export const journalPath = (drizzleDir: string) =>
 
 export function readJSON<T>(filePath: string): T {
   return JSON.parse(fs.readFileSync(filePath, "utf-8")) as T;
+}
+
+export function migrationHash(filePath: string): string {
+  return crypto
+    .createHash("sha256")
+    .update(fs.readFileSync(filePath, "utf-8"))
+    .digest("hex");
 }
 
 export function readJournal(drizzleDir: string): Journal {

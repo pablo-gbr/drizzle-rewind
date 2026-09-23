@@ -1,11 +1,16 @@
-import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 
 import { migrationsTableDisplayName, type DatabaseAdapter } from "../db/adapter";
 import { createDatabaseAdapter } from "../db/factory";
 import { SQLITE_CREATE_MIGRATIONS_TABLE } from "../db/sqlite";
-import { confirm, readJournal, type DbRow, type JournalEntry } from "../journal";
+import {
+  confirm,
+  migrationHash,
+  readJournal,
+  type DbRow,
+  type JournalEntry,
+} from "../journal";
 
 function parseArgs(argv: string[]) {
   let markApplied: number | null = null;
@@ -45,13 +50,9 @@ async function markApplied(
   if (!fs.existsSync(sqlPath)) {
     throw new Error(`Migration file not found: ${sqlPath}`);
   }
-  const hash = crypto
-    .createHash("sha256")
-    .update(fs.readFileSync(sqlPath, "utf-8"))
-    .digest("hex");
   await db.execute(
     `INSERT INTO ${db.migrationsTable} (hash, created_at) VALUES (${db.placeholder(1)}, ${db.placeholder(2)})`,
-    [hash, String(entry.when)],
+    [migrationHash(sqlPath), String(entry.when)],
   );
 }
 
