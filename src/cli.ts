@@ -21,20 +21,21 @@ Common options:
 
 generate:
   --idx <n>      Regenerate one migration, overwriting an existing down file
-  --dialect <postgres|mysql|mariadb>
+  --dialect <postgres|mysql|mariadb|sqlite|libsql|turso>
   --format <sql|json>
   --output <file>
   --fail-on-warning
   --fail-on-data-loss
+  --allow-table-rebuild    SQLite only: emit opt-in table rebuild SQL
 
 status:
   --strict       Exit 1 if anything is pending (for CI and deploy pipelines)
-  --dialect <postgres|mysql|mariadb>
+  --dialect <postgres|mysql|mariadb|sqlite|libsql|turso>
 
 rollback:
   --steps <n>    How many migrations to undo (default 1)
   --to <idx>     Undo everything above this journal index
-  --dialect <postgres|mysql|mariadb>
+  --dialect <postgres|mysql|mariadb|sqlite|libsql|turso>
   --dry-run      Print the rollback plan without executing SQL
   --execute      Explicitly request execution; execution remains the default for compatibility
   --allow-data-loss
@@ -48,7 +49,7 @@ repair:
   --mark-applied <idx>   Mark one migration applied without running its SQL
   --baseline             Mark every pending migration applied
   --clean-orphans        Delete tracking rows that are not in the journal
-  --dialect <postgres|mysql|mariadb>
+  --dialect <postgres|mysql|mariadb|sqlite|libsql|turso>
   --force                Skip the confirmation prompt
 
 DATABASE_URL must be set for status, rollback and repair.

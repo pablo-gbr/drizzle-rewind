@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 
+import { migrationsTableDisplayName } from "../db/adapter";
 import { createDatabaseAdapter } from "../db/factory";
 import { readJournal, type DbRow } from "../journal";
 
@@ -21,7 +22,7 @@ export async function status(drizzleDir: string, argv: string[]): Promise<void> 
   } catch (err) {
     if (!db.isUndefinedTableError(err)) throw err;
 
-    console.log("No drizzle.__drizzle_migrations table found.\n");
+    console.log(`No ${migrationsTableDisplayName(db)} table found.\n`);
     console.log("All migrations are pending:\n");
     for (const entry of journal.entries) {
       console.log(`  [pending]  [${String(entry.idx).padStart(4, "0")}] ${entry.tag}`);

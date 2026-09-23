@@ -6,9 +6,15 @@ export { rollback } from "./commands/rollback";
 export { repair } from "./commands/repair";
 
 export { diffSnapshots, type DiffResult } from "./diff";
-export { type SqlDialect, type DialectName } from "./dialects/dialect";
+export {
+  UnsupportedDialectOperationError,
+  isUnsupportedDialectOperationError,
+  type SqlDialect,
+  type DialectName,
+} from "./dialects/dialect";
 export { MySqlDialect, mysqlDialect } from "./dialects/mysql";
 export { PostgresDialect, postgresDialect } from "./dialects/postgres";
+export { SQLiteDialect, sqliteDialect } from "./dialects/sqlite";
 export { resolveDialect } from "./dialects/resolve";
 export { type DatabaseAdapter } from "./db/adapter";
 export { createDatabaseAdapter, dialectArg } from "./db/factory";
@@ -23,6 +29,11 @@ export {
   PostgresDatabaseAdapter,
   createPostgresAdapter,
 } from "./db/postgres";
+export {
+  SQLITE_MIGRATIONS_TABLE,
+  SQLiteDatabaseAdapter,
+  createSQLiteAdapter,
+} from "./db/sqlite";
 export {
   assertRollbackAllowed,
   classifyRollbackOperation,

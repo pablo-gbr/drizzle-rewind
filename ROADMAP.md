@@ -13,11 +13,11 @@
 - [x] Add safety classification and rollback guard flags.
 - [x] Add JSON generation output.
 - [x] Add example PostgreSQL and MariaDB/MySQL migration folders.
+- [x] Add SQLite SQL generation, database adapter, and examples.
 - [x] Switch the project license to Apache-2.0.
 
 ## Planned
 
-- [ ] SQLite SQL generation and rollback support.
 - [ ] Drizzle 1.x migration folder support.
 - [ ] More complete MariaDB/MySQL integration tests across versions.
 - [ ] PostgreSQL integration regression tests in CI.

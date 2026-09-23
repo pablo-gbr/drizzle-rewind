@@ -1,6 +1,7 @@
 import type { Snapshot } from "./snapshot";
 import type { SqlDialect } from "./dialects/dialect";
 import { postgresDialect } from "./dialects/postgres";
+import { SQLiteDialect } from "./dialects/sqlite";
 import { classifyRollbackOperation } from "./safety/classify";
 import type { RollbackWarning } from "./safety/types";
 
@@ -61,7 +62,11 @@ export function diffSnapshots(
     if (!prevTable) continue;
     for (const [fkName, fk] of Object.entries(currentTable.foreignKeys ?? {})) {
       if (!(prevTable.foreignKeys ?? {})[fkName]) {
-        statements.push(dialect.generateDropForeignKey(currentTable, fk.name ?? fkName));
+        if (isSQLiteRebuildDialect(dialect)) {
+          statements.push(...dialect.generateDropForeignKeyRebuild(currentTable, fk.name ?? fkName));
+        } else {
+          statements.push(dialect.generateDropForeignKey(currentTable, fk.name ?? fkName));
+        }
         record("drop-foreign-key", currentTable.name);
       }
     }
@@ -73,7 +78,11 @@ export function diffSnapshots(
     if (!prevTable) continue;
     for (const [ucName, uc] of Object.entries(currentTable.uniqueConstraints ?? {})) {
       if (!(prevTable.uniqueConstraints ?? {})[ucName]) {
-        statements.push(dialect.generateDropUnique(currentTable, uc.name ?? ucName));
+        if (isSQLiteRebuildDialect(dialect)) {
+          statements.push(...dialect.generateDropUniqueRebuild(currentTable, uc.name ?? ucName));
+        } else {
+          statements.push(dialect.generateDropUnique(currentTable, uc.name ?? ucName));
+        }
         record("drop-unique-constraint", currentTable.name);
       }
     }
@@ -85,13 +94,27 @@ export function diffSnapshots(
     if (!prevTable) continue;
     for (const [pkName, pk] of Object.entries(currentTable.compositePrimaryKeys ?? {})) {
       if (!(prevTable.compositePrimaryKeys ?? {})[pkName]) {
-        statements.push(dialect.generateDropPrimaryKey(currentTable, pk.name ?? pkName));
+        if (isSQLiteRebuildDialect(dialect)) {
+          statements.push(...dialect.generateDropPrimaryKeyRebuild(currentTable, pk.name ?? pkName));
+        } else {
+          statements.push(dialect.generateDropPrimaryKey(currentTable, pk.name ?? pkName));
+        }
         record("drop-primary-key", currentTable.name);
       }
     }
     for (const [pkName, pk] of Object.entries(prevTable.compositePrimaryKeys ?? {})) {
       if (!(currentTable.compositePrimaryKeys ?? {})[pkName]) {
-        statements.push(dialect.generateAddCompositePK(currentTable, { ...pk, name: pk.name ?? pkName }));
+        if (isSQLiteRebuildDialect(dialect)) {
+          statements.push(...dialect.generateRebuildTable(currentTable, {
+            ...prevTable,
+            compositePrimaryKeys: {
+              ...(prevTable.compositePrimaryKeys ?? {}),
+              [pkName]: { ...pk, name: pk.name ?? pkName },
+            },
+          }));
+        } else {
+          statements.push(dialect.generateAddCompositePK(currentTable, { ...pk, name: pk.name ?? pkName }));
+        }
         record("add-primary-key", currentTable.name);
       }
     }
@@ -104,7 +127,11 @@ export function diffSnapshots(
 
     for (const [colName, col] of Object.entries(currentTable.columns ?? {})) {
       if (!(prevTable.columns ?? {})[colName]) {
-        statements.push(dialect.generateDropColumn(currentTable, col.name));
+        if (isSQLiteRebuildDialect(dialect)) {
+          statements.push(...dialect.generateDropColumnRebuild(currentTable, col.name));
+        } else {
+          statements.push(dialect.generateDropColumn(currentTable, col.name));
+        }
         record("drop-column", currentTable.name, col.name);
       }
     }
@@ -127,6 +154,12 @@ export function diffSnapshots(
 
       if (dialect.name === "mysql" && (typeChanged || nullabilityChanged || defaultChanged)) {
         statements.push(...dialect.generateModifyColumn(currentTable, prevCol));
+        record("modify-column", currentTable.name, prevCol.name);
+        continue;
+      }
+
+      if (isSQLiteRebuildDialect(dialect) && (typeChanged || nullabilityChanged || defaultChanged)) {
+        statements.push(...dialect.generateAlterColumnRebuild(currentTable, prevCol));
         record("modify-column", currentTable.name, prevCol.name);
         continue;
       }
@@ -172,9 +205,11 @@ export function diffSnapshots(
   // Phase 6: drop tables that were added
   for (const [tableKey, currentTable] of Object.entries(currentTables)) {
     if (previousTables[tableKey]) continue;
-    for (const [fkName, fk] of Object.entries(currentTable.foreignKeys ?? {})) {
-      statements.push(dialect.generateDropForeignKey(currentTable, fk.name ?? fkName));
-      record("drop-foreign-key", currentTable.name);
+    if (dialect.name !== "sqlite") {
+      for (const [fkName, fk] of Object.entries(currentTable.foreignKeys ?? {})) {
+        statements.push(dialect.generateDropForeignKey(currentTable, fk.name ?? fkName));
+        record("drop-foreign-key", currentTable.name);
+      }
     }
     for (const [idxName, idx] of Object.entries(currentTable.indexes ?? {})) {
       statements.push(dialect.generateDropIndex(currentTable, idx.name ?? idxName));
@@ -209,7 +244,17 @@ export function diffSnapshots(
     if (!currentTable) continue;
     for (const [fkName, fk] of Object.entries(prevTable.foreignKeys ?? {})) {
       if (!(currentTable.foreignKeys ?? {})[fkName]) {
-        statements.push(dialect.generateAddFK(prevTable, { ...fk, name: fk.name ?? fkName }));
+        if (isSQLiteRebuildDialect(dialect)) {
+          statements.push(...dialect.generateRebuildTable(currentTable, {
+            ...prevTable,
+            foreignKeys: {
+              ...(prevTable.foreignKeys ?? {}),
+              [fkName]: { ...fk, name: fk.name ?? fkName },
+            },
+          }));
+        } else {
+          statements.push(dialect.generateAddFK(prevTable, { ...fk, name: fk.name ?? fkName }));
+        }
         record("add-foreign-key", prevTable.name);
       }
     }
@@ -221,7 +266,17 @@ export function diffSnapshots(
     if (!currentTable) continue;
     for (const [ucName, uc] of Object.entries(prevTable.uniqueConstraints ?? {})) {
       if (!(currentTable.uniqueConstraints ?? {})[ucName]) {
-        statements.push(dialect.generateAddUnique(prevTable, { ...uc, name: uc.name ?? ucName }));
+        if (isSQLiteRebuildDialect(dialect)) {
+          statements.push(...dialect.generateRebuildTable(currentTable, {
+            ...prevTable,
+            uniqueConstraints: {
+              ...(prevTable.uniqueConstraints ?? {}),
+              [ucName]: { ...uc, name: uc.name ?? ucName },
+            },
+          }));
+        } else {
+          statements.push(dialect.generateAddUnique(prevTable, { ...uc, name: uc.name ?? ucName }));
+        }
         record("add-unique-constraint", prevTable.name);
       }
     }
@@ -250,4 +305,8 @@ export function diffSnapshots(
   }
 
   return { statements, warnings, riskWarnings };
+}
+
+function isSQLiteRebuildDialect(dialect: SqlDialect): dialect is SQLiteDialect {
+  return dialect instanceof SQLiteDialect && dialect.allowTableRebuild;
 }

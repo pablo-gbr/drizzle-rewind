@@ -17,7 +17,8 @@ npm i -D drizzle-rewind
 
 - 🟢 PostgreSQL: supported for generation, status, rollback, and repair
 - 🔵 MariaDB/MySQL: supported for generation, status, rollback, and repair
-- ⚪ SQLite: not supported yet
+- ⚪ SQLite/libSQL/Turso: supported for generation, status, rollback, and
+  repair. Table rebuild SQL is opt-in with `--allow-table-rebuild`.
 
 MariaDB/MySQL DDL is not fully transactional. Rollback execution prints that
 warning and stops on the first failed statement by default.
@@ -48,9 +49,11 @@ files.
 The migration directory is found from `out` in your `drizzle.config.ts`, or
 `DRIZZLE_DIR`, or `--dir <path>`, in that order.
 
-Use `--dialect postgres`, `--dialect mysql`, or `--dialect mariadb` when the
-database type cannot be inferred from context. `mysql` and `mariadb` use the
-same SQL dialect implementation.
+Use `--dialect postgres`, `--dialect mysql`, `--dialect mariadb`,
+`--dialect sqlite`, `--dialect libsql`, or `--dialect turso` when the database
+type cannot be inferred from context. `mysql` and `mariadb` use the same SQL
+dialect implementation; `sqlite`, `libsql`, and `turso` resolve to the SQLite
+dialect.
 
 ## Local Usage
 
@@ -98,6 +101,8 @@ drizzle-rewind generate --idx 42
 drizzle-rewind generate --dialect postgres
 drizzle-rewind generate --dialect mariadb --idx 1
 drizzle-rewind generate --dialect mariadb --idx 1 --format json
+drizzle-rewind generate --dialect sqlite --idx 1
+drizzle-rewind generate --dialect sqlite --idx 1 --allow-table-rebuild
 drizzle-rewind generate --idx 1 --output rollback.sql
 drizzle-rewind generate --fail-on-warning
 drizzle-rewind generate --fail-on-data-loss
@@ -109,6 +114,12 @@ MariaDB/MySQL generation currently covers common table, column, index, foreign
 key, primary key, unique constraint, and default rollback SQL. Column changes
 use `MODIFY COLUMN` with the full previous column definition so nullability,
 defaults, and auto-increment metadata are preserved when present in snapshots.
+
+SQLite generation covers direct table, index, and add-column rollback SQL.
+SQLite cannot directly alter or drop many schema elements. By default those
+operations fail clearly. Use `--allow-table-rebuild` only after reviewing the
+generated SQL; it emits create/copy/drop/rename table rebuild statements for
+supported rebuild cases.
 
 Some changes cannot be undone from schema snapshots alone. Restoring a dropped
 column or table recreates the structure, but the previous data is gone.
@@ -124,18 +135,21 @@ writing `.down.sql` files.
 drizzle-rewind status
 drizzle-rewind status --strict
 drizzle-rewind status --dialect mariadb
+drizzle-rewind status --dialect sqlite
 
 drizzle-rewind repair --mark-applied 7
 drizzle-rewind repair --baseline
 drizzle-rewind repair --clean-orphans
 drizzle-rewind repair --dialect mariadb --baseline
+drizzle-rewind repair --dialect sqlite --baseline
 ```
 
 An orphan is a row in the Drizzle migration tracking table with no matching
 journal entry. On a shared database that can be legitimate, so orphans stay
 informational even under `--strict`.
 
-PostgreSQL uses `pg`. MariaDB/MySQL uses `mysql2`.
+PostgreSQL uses `pg`. MariaDB/MySQL uses `mysql2`. SQLite/libSQL/Turso uses
+`@libsql/client`.
 
 ## Rollback
 
@@ -146,6 +160,7 @@ drizzle-rewind rollback --to 41        # undo everything above journal index 41
 drizzle-rewind rollback --dialect postgres
 drizzle-rewind rollback --dialect mariadb --dry-run
 drizzle-rewind rollback --dialect mariadb --execute
+drizzle-rewind rollback --dialect sqlite --dry-run
 drizzle-rewind rollback --allow-data-loss
 drizzle-rewind rollback --allow-irreversible-data-loss
 drizzle-rewind rollback --continue-on-error
@@ -222,6 +237,7 @@ import {
   generate,
   mysqlDialect,
   postgresDialect,
+  sqliteDialect,
   repair,
   rollback,
   status,
@@ -236,6 +252,11 @@ const mysqlDown = diffSnapshots(
   currentSnapshot,
   previousSnapshot,
   mysqlDialect,
+);
+const sqliteDown = diffSnapshots(
+  currentSnapshot,
+  previousSnapshot,
+  sqliteDialect,
 );
 
 await rollback("./drizzle", ["--steps", "2", "--force"]);
@@ -259,7 +280,9 @@ npm run build
 npm test
 npm run dev -- generate --dir examples/postgre --idx 1
 npm run dev -- generate --dir examples/mariadb --dialect mariadb --idx 1
+npm run dev -- generate --dir examples/sqlite --dialect sqlite --idx 1 --allow-table-rebuild
 npm run dev -- rollback --dir examples/mariadb --dialect mariadb --dry-run
+npm run dev -- rollback --dir examples/sqlite --dialect sqlite --dry-run
 ```
 
 Optional drivers:
@@ -267,6 +290,7 @@ Optional drivers:
 ```sh
 npm install pg
 npm install mysql2
+npm install @libsql/client
 ```
 
 See [CHANGELOG.md](CHANGELOG.md) for release notes and [ROADMAP.md](ROADMAP.md)

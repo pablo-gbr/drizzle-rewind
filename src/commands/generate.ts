@@ -2,7 +2,9 @@ import * as fs from "fs";
 import * as path from "path";
 
 import { diffSnapshots } from "../diff";
+import { isUnsupportedDialectOperationError } from "../dialects/dialect";
 import { resolveDialect } from "../dialects/resolve";
+import { SQLiteDialect } from "../dialects/sqlite";
 import { EXIT } from "../exit-codes";
 import {
   BREAKPOINT,
@@ -52,9 +54,12 @@ export function generate(drizzleDir: string, argv: string[]): void {
   }
 
   const journal = readJournal(drizzleDir);
-  const dialect = resolveDialect(
+  let dialect = resolveDialect(
     dialectFlagPos !== -1 ? argv[dialectFlagPos + 1] : journal.dialect,
   );
+  if (dialect.name === "sqlite" && argv.includes("--allow-table-rebuild")) {
+    dialect = new SQLiteDialect(true);
+  }
   if (!json) console.log(`Found ${journal.entries.length} migrations in journal\n`);
 
   const entries =
@@ -124,7 +129,20 @@ export function generate(drizzleDir: string, argv: string[]): void {
       );
     }
 
-    const { statements, riskWarnings } = diffSnapshots(current, previous, dialect);
+    let diffResult: ReturnType<typeof diffSnapshots>;
+    try {
+      diffResult = diffSnapshots(current, previous, dialect);
+    } catch (err) {
+      if (isUnsupportedDialectOperationError(err)) {
+        console.error(
+          `Unsupported ${err.dialect} rollback operation in ${entry.tag}: ${err.operation}.`,
+        );
+        console.error(err.message);
+        process.exit(EXIT.UNSUPPORTED);
+      }
+      throw err;
+    }
+    const { statements, riskWarnings } = diffResult;
     const riskyWarnings = printableWarnings(riskWarnings);
     for (const w of riskyWarnings) {
       if (!json) console.log(`  WARNING: ${w.message}`);

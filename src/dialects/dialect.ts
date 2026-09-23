@@ -8,7 +8,23 @@ import type {
   UniqueConstraintDef,
 } from "../snapshot";
 
-export type DialectName = "postgres" | "mysql";
+export type DialectName = "postgres" | "mysql" | "sqlite";
+
+export class UnsupportedDialectOperationError extends Error {
+  constructor(
+    readonly dialect: DialectName,
+    readonly operation: string,
+  ) {
+    super(`${dialect} cannot directly rollback this operation: ${operation}.`);
+    this.name = "UnsupportedDialectOperationError";
+  }
+}
+
+export function isUnsupportedDialectOperationError(
+  err: unknown,
+): err is UnsupportedDialectOperationError {
+  return err instanceof UnsupportedDialectOperationError;
+}
 
 export interface SqlDialect {
   readonly name: DialectName;

@@ -2,8 +2,9 @@ import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 
-import type { DatabaseAdapter } from "../db/adapter";
+import { migrationsTableDisplayName, type DatabaseAdapter } from "../db/adapter";
 import { createDatabaseAdapter } from "../db/factory";
+import { SQLITE_CREATE_MIGRATIONS_TABLE } from "../db/sqlite";
 import { confirm, readJournal, type DbRow, type JournalEntry } from "../journal";
 
 function parseArgs(argv: string[]) {
@@ -39,6 +40,7 @@ async function markApplied(
   drizzleDir: string,
   entry: JournalEntry,
 ): Promise<void> {
+  await ensureRepairTrackingTable(db);
   const sqlPath = path.join(drizzleDir, `${entry.tag}.sql`);
   if (!fs.existsSync(sqlPath)) {
     throw new Error(`Migration file not found: ${sqlPath}`);
@@ -53,12 +55,18 @@ async function markApplied(
   );
 }
 
+async function ensureRepairTrackingTable(db: DatabaseAdapter): Promise<void> {
+  if (db.dialect === "sqlite") {
+    await db.execute(SQLITE_CREATE_MIGRATIONS_TABLE);
+  }
+}
+
 function usage(): void {
   console.log("Usage: drizzle-rewind repair <option>\n");
   console.log("  --mark-applied <idx>   Mark one migration applied without running its SQL");
   console.log("  --baseline             Mark every pending migration applied");
   console.log("  --clean-orphans        Delete tracking rows that are not in the journal");
-  console.log("  --dialect <postgres|mysql|mariadb>");
+  console.log("  --dialect <postgres|mysql|mariadb|sqlite|libsql|turso>");
   console.log("  --force                Skip confirmation prompts");
   console.log("\nRun 'drizzle-rewind status' to see the current state.");
 }
@@ -135,7 +143,7 @@ export async function repair(drizzleDir: string, argv: string[]): Promise<void> 
     );
   } catch (err) {
     if (!db.isUndefinedTableError(err)) throw err;
-    console.log("No drizzle.__drizzle_migrations table found.");
+    console.log(`No ${migrationsTableDisplayName(db)} table found.`);
     await db.close();
     return;
   }

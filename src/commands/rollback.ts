@@ -13,7 +13,7 @@ import {
   type Journal,
   type JournalEntry,
 } from "../journal";
-import type { DatabaseAdapter } from "../db/adapter";
+import { migrationsTableDisplayName, type DatabaseAdapter } from "../db/adapter";
 import {
   buildRollbackPlan,
   printMariaDbDDLWarning,
@@ -116,7 +116,7 @@ export async function rollback(drizzleDir: string, argv: string[]): Promise<void
     appliedTimestamps = new Set(rows.map((r) => String(r.created_at)));
   } catch (err) {
     if (!db.isUndefinedTableError(err)) throw err;
-    console.log("No drizzle.__drizzle_migrations table found. Nothing is applied.");
+    console.log(`No ${migrationsTableDisplayName(db)} table found. Nothing is applied.`);
     await db.close();
     return;
   }
@@ -212,7 +212,7 @@ export async function rollback(drizzleDir: string, argv: string[]): Promise<void
     failed =
       dialect.name === "mysql"
         ? (await executeMySqlMigration(db, migration, continueOnError)) || failed
-        : (await executePostgresMigration(db, migration)) || failed;
+        : (await executeTransactionalMigration(db, migration)) || failed;
 
     if (failed && !continueOnError) {
       await db.close();
@@ -248,7 +248,7 @@ function rollbackTargetTag(entries: JournalEntry[], targets: JournalEntry[]): st
   return entries.find((e) => e.idx === last.idx - 1)?.tag ?? "base";
 }
 
-async function executePostgresMigration(
+async function executeTransactionalMigration(
   db: DatabaseAdapter,
   migration: RollbackPlanMigration,
 ): Promise<boolean> {

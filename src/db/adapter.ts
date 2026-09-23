@@ -11,3 +11,9 @@ export interface DatabaseAdapter {
   close(): Promise<void>;
   isUndefinedTableError(err: unknown): boolean;
 }
+
+export function migrationsTableDisplayName(db: DatabaseAdapter): string {
+  return db.dialect === "postgres"
+    ? "drizzle.__drizzle_migrations"
+    : "__drizzle_migrations";
+}

@@ -24,6 +24,9 @@
     "migrations",
     "down-migration",
     "rollback",
+    "sqlite",
+    "libsql",
+    "turso",
     "postgres",
     "postgresql",
     "mysql",
@@ -36,6 +39,7 @@
     "prepublishOnly": "npm run build"
   },
   "peerDependencies": {
+    "@libsql/client": ">=0.15",
     "drizzle-kit": "^0.31.0",
     "mysql2": ">=3",
     "pg": ">=8"
@@ -59,6 +63,9 @@
     "access": "public"
   },
   "peerDependenciesMeta": {
+    "@libsql/client": {
+      "optional": true
+    },
     "pg": {
       "optional": true
     },

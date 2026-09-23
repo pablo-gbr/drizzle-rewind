@@ -2,6 +2,7 @@ import { resolveDialect } from "../dialects/resolve";
 import type { DatabaseAdapter } from "./adapter";
 import { createMySqlAdapter } from "./mysql";
 import { createPostgresAdapter } from "./postgres";
+import { createSQLiteAdapter } from "./sqlite";
 
 export function dialectArg(argv: string[]): string | undefined {
   const pos = argv.indexOf("--dialect");
@@ -10,5 +11,12 @@ export function dialectArg(argv: string[]): string | undefined {
 
 export function createDatabaseAdapter(argv: string[]): DatabaseAdapter {
   const dialect = resolveDialect(dialectArg(argv));
-  return dialect.name === "mysql" ? createMySqlAdapter() : createPostgresAdapter();
+  switch (dialect.name) {
+    case "postgres":
+      return createPostgresAdapter();
+    case "mysql":
+      return createMySqlAdapter();
+    case "sqlite":
+      return createSQLiteAdapter();
+  }
 }
