@@ -1,6 +1,8 @@
 import * as fs from "fs";
 import * as path from "path";
 
+import { color } from "./cli-colors";
+
 /**
  * Where the drizzle-kit output lives. Resolution order:
  *   1. --dir <path> on the command line
@@ -33,11 +35,32 @@ export function requireDatabaseUrl(): string {
   const url = process.env.DATABASE_URL;
   if (!url) {
     console.error(
-      "DATABASE_URL is not set. Export it, or put it in a .env file that your shell loads.",
+      color(
+        "red",
+        "DATABASE_URL is not set. Export it, or put it in a .env file that your shell loads.",
+      ),
     );
     process.exit(1);
   }
   return url;
+}
+
+export function describeDatabaseUrl(value = process.env.DATABASE_URL): string {
+  if (!value) return "DATABASE_URL is not set";
+
+  try {
+    const url = new URL(value);
+    const user = url.username ? decodeURIComponent(url.username) : "none";
+    const database = url.pathname ? decodeURIComponent(url.pathname.replace(/^\//, "")) : "none";
+    const host = url.host || "local";
+    return `${url.protocol.replace(/:$/, "")}://${host} database=${database || "none"} user=${user}`;
+  } catch {
+    return "DATABASE_URL is set but is not a parseable URL";
+  }
+}
+
+export function logDatabaseUrlDiagnostic(): void {
+  console.error(color("gray", `Connection target: ${describeDatabaseUrl()}`));
 }
 
 /**

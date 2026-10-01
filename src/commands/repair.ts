@@ -1,6 +1,8 @@
 import * as fs from "fs";
 import * as path from "path";
 
+import { color } from "../cli-colors";
+import { logDatabaseUrlDiagnostic } from "../config";
 import { migrationsTableDisplayName, type DatabaseAdapter } from "../db/adapter";
 import { createDatabaseAdapter } from "../db/factory";
 import { SQLITE_CREATE_MIGRATIONS_TABLE } from "../db/sqlite";
@@ -36,6 +38,7 @@ async function appliedTimestamps(db: DatabaseAdapter): Promise<Set<string>> {
     return new Set(rows.map((r) => String(r.created_at)));
   } catch (err) {
     if (db.isUndefinedTableError(err)) return new Set();
+    logDatabaseUrlDiagnostic();
     throw err;
   }
 }
@@ -63,7 +66,7 @@ async function ensureRepairTrackingTable(db: DatabaseAdapter): Promise<void> {
 }
 
 function usage(): void {
-  console.log("Usage: drizzle-rewind repair <option>\n");
+  console.log(`${color("bold", "Usage:")} drizzle-rewind repair <option>\n`);
   console.log("  --mark-applied <idx>   Mark one migration applied without running its SQL");
   console.log("  --baseline             Mark every pending migration applied");
   console.log("  --clean-orphans        Delete tracking rows that are not in the journal");
@@ -86,24 +89,24 @@ export async function repair(drizzleDir: string, argv: string[]): Promise<void> 
   if (opts.markApplied !== null) {
     const entry = journal.entries.find((e) => e.idx === opts.markApplied);
     if (!entry) {
-      console.log(`No migration with idx ${opts.markApplied} in the journal.`);
+      console.log(color("red", `No migration with idx ${opts.markApplied} in the journal.`));
       await db.close();
       process.exit(1);
     }
     if ((await appliedTimestamps(db)).has(String(entry.when))) {
-      console.log(`${entry.tag} is already marked as applied.`);
+      console.log(`${color("green", "Already applied:")} ${entry.tag}`);
       await db.close();
       return;
     }
-    console.log("Will mark as applied (without running SQL):\n");
+    console.log(`${color("yellow", "Will mark as applied")} (without running SQL):\n`);
     console.log(`  [${String(entry.idx).padStart(4, "0")}] ${entry.tag}\n`);
     if (!opts.force && !(await confirm("Proceed?"))) {
-      console.log("Cancelled.");
+      console.log(color("yellow", "Cancelled."));
       await db.close();
       return;
     }
     await markApplied(db, drizzleDir, entry);
-    console.log(`Marked ${entry.tag} as applied.`);
+    console.log(`${color("green", "Marked")} ${entry.tag} as applied.`);
     await db.close();
     return;
   }
@@ -112,25 +115,25 @@ export async function repair(drizzleDir: string, argv: string[]): Promise<void> 
     const applied = await appliedTimestamps(db);
     const pending = journal.entries.filter((e) => !applied.has(String(e.when)));
     if (pending.length === 0) {
-      console.log("All migrations are already applied. Nothing to baseline.");
+      console.log(color("green", "All migrations are already applied. Nothing to baseline."));
       await db.close();
       return;
     }
-    console.log(`Will mark ${pending.length} migration(s) as applied (without running SQL):\n`);
+    console.log(`${color("yellow", `Will mark ${pending.length} migration(s) as applied`)} (without running SQL):\n`);
     for (const e of pending) {
       console.log(`  [${String(e.idx).padStart(4, "0")}] ${e.tag}`);
     }
     console.log("");
     if (!opts.force && !(await confirm("Proceed?"))) {
-      console.log("Cancelled.");
+      console.log(color("yellow", "Cancelled."));
       await db.close();
       return;
     }
     for (const e of pending) {
       await markApplied(db, drizzleDir, e);
-      console.log(`  Marked ${e.tag} as applied.`);
+      console.log(`  ${color("green", "Marked")} ${e.tag} as applied.`);
     }
-    console.log(`\nBaselined ${pending.length} migration(s).`);
+    console.log(`\n${color("green", "Baselined")} ${pending.length} migration(s).`);
     await db.close();
     return;
   }
@@ -143,27 +146,30 @@ export async function repair(drizzleDir: string, argv: string[]): Promise<void> 
       `SELECT id, hash, created_at FROM ${db.migrationsTable} ORDER BY created_at`,
     );
   } catch (err) {
-    if (!db.isUndefinedTableError(err)) throw err;
-    console.log(`No ${migrationsTableDisplayName(db)} table found.`);
+    if (!db.isUndefinedTableError(err)) {
+      logDatabaseUrlDiagnostic();
+      throw err;
+    }
+    console.log(`${color("yellow", "No tracking table:")} ${migrationsTableDisplayName(db)}`);
     await db.close();
     return;
   }
 
   const orphans = dbRows.filter((r) => !journalTimestamps.has(String(r.created_at)));
   if (orphans.length === 0) {
-    console.log("No orphan entries found.");
+    console.log(color("green", "No orphan entries found."));
     await db.close();
     return;
   }
 
-  console.log(`Found ${orphans.length} orphan(s) to remove:\n`);
+  console.log(`${color("yellow", `Found ${orphans.length} orphan(s) to remove:`)}\n`);
   for (const o of orphans) {
     console.log(`  id=${o.id} hash=${o.hash.substring(0, 16)}... created_at=${o.created_at}`);
   }
   console.log("");
 
   if (!opts.force && !(await confirm("Remove these orphan entries?"))) {
-    console.log("Cancelled.");
+    console.log(color("yellow", "Cancelled."));
     await db.close();
     return;
   }
@@ -174,6 +180,6 @@ export async function repair(drizzleDir: string, argv: string[]): Promise<void> 
       [o.id],
     );
   }
-  console.log(`Removed ${orphans.length} orphan row(s).`);
+  console.log(`${color("green", "Removed")} ${orphans.length} orphan row(s).`);
   await db.close();
 }

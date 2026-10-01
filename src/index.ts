@@ -4,6 +4,7 @@ export { generate } from "./commands/generate";
 export { status } from "./commands/status";
 export { rollback } from "./commands/rollback";
 export { repair } from "./commands/repair";
+export { reset } from "./commands/reset";
 
 export { diffSnapshots, type DiffResult } from "./diff";
 export {

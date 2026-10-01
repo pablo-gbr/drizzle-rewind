@@ -3,6 +3,8 @@ import * as fs from "fs";
 import * as path from "path";
 import * as readline from "readline";
 
+import { color } from "./cli-colors";
+
 export interface JournalEntry {
   idx: number;
   version: string;
@@ -44,7 +46,10 @@ export function readJournal(drizzleDir: string): Journal {
   const p = journalPath(drizzleDir);
   if (!fs.existsSync(p)) {
     console.error(
-      `No migration journal at ${p}.\nPass --dir, set DRIZZLE_DIR, or run from the directory holding drizzle.config.ts.`,
+      color(
+        "red",
+        `No migration journal at ${p}.\nPass --dir, set DRIZZLE_DIR, or run from the directory holding drizzle.config.ts.`,
+      ),
     );
     process.exit(1);
   }
@@ -80,7 +85,7 @@ export function confirm(message: string): Promise<boolean> {
     output: process.stdout,
   });
   return new Promise((resolve) => {
-    rl.question(`${message} (y/N): `, (answer) => {
+    rl.question(`${color("yellow", message)} (y/N): `, (answer) => {
       rl.close();
       resolve(answer.toLowerCase() === "y");
     });

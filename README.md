@@ -1,6 +1,6 @@
 # drizzle-rewind
 
-Down migration generation, rollback helpers, status, and repair tooling for
+Down migration generation, rollback helpers, reset, status, and repair tooling for
 [Drizzle ORM](https://orm.drizzle.team).
 
 This project is a fork and continuation of
@@ -34,6 +34,7 @@ drizzle-rewind generate    # write <tag>.down.sql for migrations missing one
 drizzle-rewind status      # applied, pending and orphan migrations
 drizzle-rewind rollback    # preview and run down migrations with safety guards
 drizzle-rewind repair      # fix the tracking table without running migration SQL
+drizzle-rewind reset       # drop database objects, then run drizzle-kit push
 ```
 
 Get CLI help with:
@@ -43,8 +44,8 @@ drizzle-rewind --help
 drizzle-rewind -h
 ```
 
-`status`, `rollback`, and `repair` need `DATABASE_URL`. `generate` only reads
-files.
+`status`, `rollback`, `repair`, and `reset` need `DATABASE_URL`. `generate`
+only reads files.
 
 The migration directory is found from `out` in your `drizzle.config.ts`, or
 `DRIZZLE_DIR`, or `--dir <path>`, in that order.
@@ -104,11 +105,13 @@ drizzle-rewind generate --dialect mariadb --idx 1 --format json
 drizzle-rewind generate --dialect sqlite --idx 1
 drizzle-rewind generate --dialect sqlite --idx 1 --allow-table-rebuild
 drizzle-rewind generate --idx 1 --output rollback.sql
+drizzle-rewind generate --check
 drizzle-rewind generate --fail-on-warning
 drizzle-rewind generate --fail-on-data-loss
 ```
 
-Existing down files are never overwritten without `--idx`.
+Existing down files are never overwritten without `--idx`. Use `--check` in CI to
+fail when generated down migrations are missing or stale.
 
 MariaDB/MySQL generation currently covers common table, column, index, foreign
 key, primary key, unique constraint, and default rollback SQL. Column changes
@@ -150,6 +153,25 @@ informational even under `--strict`.
 
 PostgreSQL uses `pg`. MariaDB/MySQL uses `mysql2`. SQLite/libSQL/Turso uses
 `@libsql/client`.
+
+## Reset
+
+```sh
+drizzle-rewind reset
+drizzle-rewind reset --dialect mariadb --force
+drizzle-rewind reset --dialect sqlite --dry-run
+drizzle-rewind reset --migrate       # run drizzle-kit migrate instead of push
+drizzle-rewind reset --config drizzle.config.ts
+```
+
+Reset drops user objects in the connected database, then runs `drizzle-kit push`
+by default. Use `--migrate` when you want to rebuild a fresh database by applying
+migrations instead. Any option that is not consumed by `drizzle-rewind` is passed
+through to `drizzle-kit`.
+
+PostgreSQL resets all non-system schemas and recreates `public`. MariaDB/MySQL
+drops views, tables, routines, and events in the current database. SQLite drops
+user tables, views, and triggers.
 
 ## Rollback
 

@@ -1,6 +1,8 @@
 import * as fs from "fs";
 import * as path from "path";
 
+import { color } from "../cli-colors";
+import { logDatabaseUrlDiagnostic } from "../config";
 import { createDatabaseAdapter, dialectArg } from "../db/factory";
 import { resolveDialect } from "../dialects/resolve";
 import { EXIT } from "../exit-codes";
@@ -103,7 +105,7 @@ export async function rollback(drizzleDir: string, argv: string[]): Promise<void
   const db = createDatabaseAdapter(argv);
 
   if (journal.entries.length === 0) {
-    console.log("No migrations in journal.");
+    console.log(color("green", "No migrations in journal."));
     await db.close();
     return;
   }
@@ -115,8 +117,11 @@ export async function rollback(drizzleDir: string, argv: string[]): Promise<void
     );
     appliedTimestamps = new Set(rows.map((r) => String(r.created_at)));
   } catch (err) {
-    if (!db.isUndefinedTableError(err)) throw err;
-    console.log(`No ${migrationsTableDisplayName(db)} table found. Nothing is applied.`);
+    if (!db.isUndefinedTableError(err)) {
+      logDatabaseUrlDiagnostic();
+      throw err;
+    }
+    console.log(`${color("yellow", "No tracking table:")} ${migrationsTableDisplayName(db)}. Nothing is applied.`);
     await db.close();
     return;
   }
@@ -125,7 +130,7 @@ export async function rollback(drizzleDir: string, argv: string[]): Promise<void
     appliedTimestamps.has(String(e.when)),
   );
   if (applied.length === 0) {
-    console.log("No applied migrations found in the database.");
+    console.log(color("green", "No applied migrations found in the database."));
     await db.close();
     return;
   }
@@ -136,7 +141,7 @@ export async function rollback(drizzleDir: string, argv: string[]): Promise<void
       : applied.sort((a, b) => b.idx - a.idx).slice(0, steps);
 
   if (targets.length === 0) {
-    console.log("No migrations to roll back.");
+    console.log(color("green", "No migrations to roll back."));
     await db.close();
     return;
   }
@@ -145,9 +150,9 @@ export async function rollback(drizzleDir: string, argv: string[]): Promise<void
     (e) => !fs.existsSync(path.join(drizzleDir, `${e.tag}.down.sql`)),
   );
   if (missingDown.length > 0) {
-    console.log("Missing down.sql files for:");
+    console.log(color("red", "Missing down.sql files for:"));
     for (const e of missingDown) console.log(`  - ${e.tag}`);
-    console.log("\nRun 'drizzle-rewind generate' first.");
+    console.log(`\n${color("cyan", "Run")} 'drizzle-rewind generate' first.`);
     await db.close();
     process.exit(EXIT.GENERIC);
   }
@@ -158,7 +163,7 @@ export async function rollback(drizzleDir: string, argv: string[]): Promise<void
   printRollbackPlan(plan);
 
   if (dryRun) {
-    console.log("\nDry run only. No database changes were made.");
+    console.log(color("green", "\nDry run only. No database changes were made."));
     await db.close();
     return;
   }
@@ -170,9 +175,9 @@ export async function rollback(drizzleDir: string, argv: string[]): Promise<void
     });
   } catch (err) {
     for (const warning of printableWarnings(plan.warnings)) {
-      console.error(`WARNING: ${warning.message}`);
+      console.error(`${color("yellow", "WARNING:")} ${warning.message}`);
     }
-    console.error((err as Error).message);
+    console.error(color("red", (err as Error).message));
     await db.close();
     process.exit(
       plan.warnings.some((w) => w.level === "unsupported")
@@ -186,22 +191,22 @@ export async function rollback(drizzleDir: string, argv: string[]): Promise<void
   }
 
   console.log(
-    `The following migrations will be ${remove ? "rolled back and REMOVED" : "rolled back"}:\n`,
+    `${color("yellow", "The following migrations will be")} ${remove ? color("red", "rolled back and REMOVED") : "rolled back"}:\n`,
   );
   for (const migration of plan.migrations) {
     const entry = migration.entry;
     const destructive = printableWarnings(migration.warnings).length > 0;
     console.log(
-      `  [${String(entry.idx).padStart(4, "0")}] ${entry.tag}${destructive ? " (contains destructive operations)" : ""}`,
+      `  [${String(entry.idx).padStart(4, "0")}] ${entry.tag}${destructive ? color("yellow", " (contains destructive operations)") : ""}`,
     );
   }
   if (remove) {
-    console.log("\n  Migration files, down files and snapshots will be deleted.");
+    console.log(color("red", "\n  Migration files, down files and snapshots will be deleted."));
   }
   console.log("");
 
   if (!force && !(await confirm("Proceed with rollback?"))) {
-    console.log("Rollback cancelled.");
+    console.log(color("yellow", "Rollback cancelled."));
     await db.close();
     return;
   }
@@ -226,13 +231,13 @@ export async function rollback(drizzleDir: string, argv: string[]): Promise<void
   }
 
   if (remove) {
-    console.log("\nRemoving migration files...");
+    console.log(color("yellow", "\nRemoving migration files..."));
     for (const entry of targets) {
       console.log(`  ${entry.tag}: deleted ${removeFiles(drizzleDir, entry, journal).join(", ")}`);
     }
   }
 
-  console.log(`\nDone. Rolled back ${targets.length} migration(s).`);
+  console.log(`\n${color("green", "Done.")} Rolled back ${targets.length} migration(s).`);
   console.log(
     remove
       ? "Migration files removed. Run 'drizzle-kit generate' to create new ones."
@@ -253,19 +258,19 @@ async function executeTransactionalMigration(
   migration: RollbackPlanMigration,
 ): Promise<boolean> {
   const entry = migration.entry;
-  console.log(`Rolling back ${entry.tag}...`);
+  console.log(`${color("cyan", "Rolling back")} ${entry.tag}...`);
 
   try {
     await db.transaction(async (tx) => {
       for (const stmt of migration.statements) await tx.execute(stmt);
       await deleteMigrationTracking(tx, entry);
     });
-    console.log(`  Rolled back successfully (${migration.statements.length} statements)`);
+    console.log(`  ${color("green", "Rolled back successfully")} (${migration.statements.length} statements)`);
     return false;
   } catch (err) {
-    console.error(`  FAILED to roll back ${entry.tag}:`);
+    console.error(color("red", `  FAILED to roll back ${entry.tag}:`));
     console.error(`  ${err}`);
-    console.log("\n  Transaction rolled back. The database is unchanged for this migration.");
+    console.log(color("green", "\n  Transaction rolled back. The database is unchanged for this migration."));
     return true;
   }
 }
@@ -279,7 +284,7 @@ async function executeMySqlMigration(
   const applied: string[] = [];
   const failed: Array<{ index: number; statement: string; err: unknown }> = [];
 
-  console.log(`Rolling back ${entry.tag}...`);
+  console.log(`${color("cyan", "Rolling back")} ${entry.tag}...`);
 
   for (let i = 0; i < migration.statements.length; i++) {
     const statement = migration.statements[i];
@@ -294,21 +299,21 @@ async function executeMySqlMigration(
   }
 
   if (failed.length > 0) {
-    console.log(`  Tracking was not updated for ${entry.tag}.`);
+    console.log(color("yellow", `  Tracking was not updated for ${entry.tag}.`));
     return true;
   }
 
   try {
     await deleteMigrationTracking(db, entry);
   } catch (err) {
-    console.error(`  FAILED to update migration tracking for ${entry.tag}:`);
+    console.error(color("red", `  FAILED to update migration tracking for ${entry.tag}:`));
     console.error(`  ${err}`);
     console.error(
-      "  Schema statements completed, but tracking was not updated for this migration.",
+      color("red", "  Schema statements completed, but tracking was not updated for this migration."),
     );
     return true;
   }
-  console.log(`  Rolled back successfully (${migration.statements.length} statements)`);
+  console.log(`  ${color("green", "Rolled back successfully")} (${migration.statements.length} statements)`);
   return false;
 }
 
@@ -327,16 +332,16 @@ function printPartialFailure(
   applied: string[],
   failed: { index: number; statement: string; err: unknown },
 ): void {
-  console.error(`Rollback failed on statement ${failed.index}/${total}.`);
+  console.error(color("red", `Rollback failed on statement ${failed.index}/${total}.`));
   if (applied.length > 0) {
-    console.error("\nApplied successfully:");
+    console.error(color("green", "\nApplied successfully:"));
     applied.forEach((stmt, i) => console.error(`  ${i + 1}. ${oneLine(stmt)}`));
   }
-  console.error("\nFailed:");
+  console.error(color("red", "\nFailed:"));
   console.error(`  ${failed.index}. ${oneLine(failed.statement)}`);
   console.error(`  ${failed.err}`);
   console.error(
-    "\nMariaDB DDL may already be committed. Earlier statements may not be automatically reversible.",
+    color("yellow", "\nMariaDB DDL may already be committed. Earlier statements may not be automatically reversible."),
   );
 }
 

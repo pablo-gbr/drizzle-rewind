@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 
+import { color } from "../cli-colors";
 import { BREAKPOINT, type JournalEntry } from "../journal";
 import { summarizeWarnings } from "../safety/classify";
 import { classifySqlWarnings } from "../safety/sql";
@@ -69,18 +70,18 @@ export function buildRollbackPlan(
 }
 
 export function printRollbackPlan(plan: RollbackPlan): void {
-  console.log(`Dialect: ${plan.dialect}`);
-  console.log(`Rollback: ${plan.from} -> ${plan.to}`);
-  console.log(`Migrations: ${plan.migrations.length}`);
-  console.log(`Statements: ${plan.statements.length}`);
+  console.log(`${color("cyan", "Dialect:")} ${plan.dialect}`);
+  console.log(`${color("cyan", "Rollback:")} ${plan.from} -> ${plan.to}`);
+  console.log(`${color("cyan", "Migrations:")} ${plan.migrations.length}`);
+  console.log(`${color("cyan", "Statements:")} ${plan.statements.length}`);
   console.log("");
-  console.log("Risk summary:");
-  console.log(`  SAFE: ${plan.summary.safe}`);
-  console.log(`  DATA LOSS: ${plan.summary["data-loss"]}`);
-  console.log(`  IRREVERSIBLE DATA LOSS: ${plan.summary["irreversible-data-loss"]}`);
-  console.log(`  UNSUPPORTED: ${plan.summary.unsupported}`);
+  console.log(color("bold", "Risk summary:"));
+  console.log(`  ${color("green", "SAFE:")} ${plan.summary.safe}`);
+  console.log(`  ${color("yellow", "DATA LOSS:")} ${plan.summary["data-loss"]}`);
+  console.log(`  ${color("red", "IRREVERSIBLE DATA LOSS:")} ${plan.summary["irreversible-data-loss"]}`);
+  console.log(`  ${color("red", "UNSUPPORTED:")} ${plan.summary.unsupported}`);
   console.log("");
-  console.log("Statements:");
+  console.log(color("bold", "Statements:"));
   plan.statements.forEach((stmt, i) => {
     console.log(`  ${i + 1}. ${oneLine(stmt)}`);
   });
@@ -88,7 +89,7 @@ export function printRollbackPlan(plan: RollbackPlan): void {
 
 export function printMariaDbDDLWarning(statementCount: number): void {
   console.log("");
-  console.log("Warning: MariaDB/MySQL DDL is not fully transactional.");
+  console.log(color("yellow", "Warning: MariaDB/MySQL DDL is not fully transactional."));
   if (statementCount >= 3) {
     console.log(
       `If rollback statement 3 of ${statementCount} fails, statements 1-2 may already have been applied.`,

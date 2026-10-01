@@ -1,6 +1,8 @@
 import * as fs from "fs";
 import * as path from "path";
 
+import { color } from "../cli-colors";
+import { logDatabaseUrlDiagnostic } from "../config";
 import { migrationsTableDisplayName } from "../db/adapter";
 import { createDatabaseAdapter } from "../db/factory";
 import {
@@ -55,14 +57,17 @@ export async function status(drizzleDir: string, argv: string[]): Promise<void> 
       `SELECT id, hash, created_at FROM ${db.migrationsTable} ORDER BY created_at ASC`,
     );
   } catch (err) {
-    if (!db.isUndefinedTableError(err)) throw err;
-
-    console.log(`No ${migrationsTableDisplayName(db)} table found.\n`);
-    console.log("All migrations are pending:\n");
-    for (const entry of journal.entries) {
-      console.log(`  [pending]  [${String(entry.idx).padStart(4, "0")}] ${entry.tag}`);
+    if (!db.isUndefinedTableError(err)) {
+      logDatabaseUrlDiagnostic();
+      throw err;
     }
-    console.log(`\nApplied: 0 | Pending: ${journal.entries.length} | Orphans: 0`);
+
+    console.log(`${color("yellow", "No tracking table:")} ${migrationsTableDisplayName(db)}\n`);
+    console.log(`${color("yellow", "All migrations are pending:")}\n`);
+    for (const entry of journal.entries) {
+      console.log(`  [${color("yellow", "pending")}]  [${String(entry.idx).padStart(4, "0")}] ${entry.tag}`);
+    }
+    console.log(`\n${color("green", "Applied: 0")} | ${color("yellow", `Pending: ${journal.entries.length}`)} | Orphans: 0`);
     await db.close();
     if (strict && journal.entries.length > 0) process.exit(1);
     return;
@@ -76,8 +81,8 @@ export async function status(drizzleDir: string, argv: string[]): Promise<void> 
   let applied = 0;
   let pending = 0;
 
-  console.log("Migration status:\n");
-  console.log(`Dialect: ${db.dialect}\n`);
+  console.log(`${color("bold", "Migration status:")}\n`);
+  console.log(`${color("cyan", "Dialect:")} ${db.dialect}\n`);
 
   for (const entry of journal.entries) {
     const isApplied = appliedTimestamps.has(String(entry.when));
@@ -85,8 +90,10 @@ export async function status(drizzleDir: string, argv: string[]): Promise<void> 
 
     const hasDown = fs.existsSync(path.join(drizzleDir, `${entry.tag}.down.sql`));
     const hashNote = mismatchIdx.has(entry.idx) ? " (hash mismatch)" : "";
+    const state = isApplied ? color("green", "applied") : color("yellow", "pending");
+    const downNote = hasDown ? "" : color("yellow", " (no down.sql)");
     console.log(
-      `  [${isApplied ? "applied" : "pending"}]  [${String(entry.idx).padStart(4, "0")}] ${entry.tag}${hashNote}${hasDown ? "" : " (no down.sql)"}`,
+      `  [${state}]  [${String(entry.idx).padStart(4, "0")}] ${entry.tag}${hashNote}${downNote}`,
     );
   }
 
@@ -95,7 +102,7 @@ export async function status(drizzleDir: string, argv: string[]): Promise<void> 
     console.log("");
     for (const o of orphans) {
       console.log(
-        `  [orphan]   id=${o.id} hash=${o.hash.substring(0, 16)}... created_at=${o.created_at}, not in journal`,
+        `  [${color("yellow", "orphan")}]   id=${o.id} hash=${o.hash.substring(0, 16)}... created_at=${o.created_at}, not in journal`,
       );
     }
   }
@@ -104,13 +111,13 @@ export async function status(drizzleDir: string, argv: string[]): Promise<void> 
     console.log("");
     for (const m of hashMismatches) {
       console.log(
-        `  [hash-mismatch] [${String(m.entry.idx).padStart(4, "0")}] ${m.entry.tag} db=${(m.actual ?? "missing").substring(0, 16)}... file=${(m.expected || "missing").substring(0, 16)}...`,
+        `  [${color("red", "hash-mismatch")}] [${String(m.entry.idx).padStart(4, "0")}] ${m.entry.tag} db=${(m.actual ?? "missing").substring(0, 16)}... file=${(m.expected || "missing").substring(0, 16)}...`,
       );
     }
   }
 
   console.log(
-    `\nApplied: ${applied} | Pending: ${pending} | Orphans: ${orphans.length} | Hash mismatches: ${hashMismatches.length}`,
+    `\n${color("green", `Applied: ${applied}`)} | ${pending > 0 ? color("yellow", `Pending: ${pending}`) : `Pending: ${pending}`} | ${orphans.length > 0 ? color("yellow", `Orphans: ${orphans.length}`) : `Orphans: ${orphans.length}`} | ${hashMismatches.length > 0 ? color("red", `Hash mismatches: ${hashMismatches.length}`) : `Hash mismatches: ${hashMismatches.length}`}`,
   );
   if (orphans.length > 0) {
     console.log("\nRun 'drizzle-rewind repair --clean-orphans' to remove orphan rows.");
